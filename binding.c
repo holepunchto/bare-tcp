@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <bare.h>
+#include <stdlib.h>
 #include <uv.h>
 
 typedef struct {
@@ -7,6 +8,7 @@ typedef struct {
 
   struct {
     uv_connect_t connect;
+    uv_write_t write;
   } requests;
 
   js_env_t *env;
@@ -15,7 +17,7 @@ typedef struct {
 } bare_tcp_t;
 
 static void
-on_connect (uv_connect_t *req, int status) {
+bare_tcp__on_connect (uv_connect_t *req, int status) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
@@ -109,7 +111,57 @@ bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
   uv_connect_t *req = &tcp->requests.connect;
   req->data = tcp;
 
-  uv_tcp_connect(req, &tcp->handle, (struct sockaddr *) &addr, on_connect);
+  uv_tcp_connect(req, &tcp->handle, (struct sockaddr *) &addr, bare_tcp__on_connect);
+
+  return NULL;
+}
+
+static js_value_t *
+bare_tcp_writev (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 2;
+  js_value_t *argv[2];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 2);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  js_value_t *arr = argv[1];
+
+  uint32_t bufs_len;
+  err = js_get_array_length(env, arr, &bufs_len);
+  assert(err == 0);
+
+  uv_buf_t *bufs = malloc(sizeof(uv_buf_t) * bufs_len);
+
+  for (uint32_t i = 0; i < bufs_len; i++) {
+    js_value_t *item;
+    err = js_get_element(env, arr, i, &item);
+    assert(err == 0);
+
+    uv_buf_t *buf = &bufs[i];
+    err = js_get_typedarray_info(env, item, NULL, (void **) &buf->base, (size_t *) &buf->len, NULL, NULL);
+    assert(err == 0);
+  }
+
+  uv_write_t *req = &tcp->requests.write;
+
+  req->data = tcp;
+
+  err = uv_write(req, (uv_stream_t *) &tcp->handle, bufs, bufs_len, NULL);
+
+  free(bufs);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
 
   return NULL;
 }
@@ -125,6 +177,11 @@ init (js_env_t *env, js_value_t *exports) {
     js_value_t *fn;
     js_create_function(env, "connect", -1, bare_tcp_connect, NULL, &fn);
     js_set_named_property(env, exports, "connect", fn);
+  }
+  {
+    js_value_t *fn;
+    js_create_function(env, "writev", -1, bare_tcp_writev, NULL, &fn);
+    js_set_named_property(env, exports, "writev", fn);
   }
 
   return exports;

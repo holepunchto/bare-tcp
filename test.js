@@ -9,7 +9,7 @@ test('socket connect', (t) => {
   socket.connect(8880, '127.0.0.1')
 
   socket.once('connect', () => {
-    t.comment('connected')
+    socket.end('hello world\n')
     t.pass()
   })
 })

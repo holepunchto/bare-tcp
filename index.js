@@ -16,6 +16,10 @@ exports.Socket = class TCPSocket extends Duplex {
   _onconnect () {
     this.emit('connect')
   }
+
+  _writev (chunk, cb) {
+    binding.writev(this._handle, chunk)
+  }
 }
 
 function mapWritable (buf) {
