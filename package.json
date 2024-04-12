@@ -1,0 +1,26 @@
+{
+  "name": "bare-tcp",
+  "version": "0.0.0",
+  "description": "...",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "binding.c",
+    "binding.js",
+    "CMakeLists.txt",
+    "prebuilds"
+  ],
+  "addon": true,
+  "scripts": {
+    "test": "standard && bare test.js"
+  },
+  "author": "Holepunch Inc",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "streamx": "^2.16.1"
+  },
+  "devDependencies": {
+    "brittle": "^3.5.0",
+    "standard": "^17.1.0"
+  }
+}
