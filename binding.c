@@ -9,11 +9,14 @@ typedef struct {
   struct {
     uv_connect_t connect;
     uv_write_t write;
+    uv_shutdown_t shutdown;
   } requests;
 
   js_env_t *env;
   js_ref_t *ctx;
   js_ref_t *on_connect;
+  js_ref_t *on_write;
+  js_ref_t *on_end;
 } bare_tcp_t;
 
 static void
@@ -36,7 +39,122 @@ bare_tcp__on_connect (uv_connect_t *req, int status) {
   err = js_get_reference_value(env, tcp->on_connect, &on_connect);
   assert(err == 0);
 
-  js_call_function(env, ctx, on_connect, 0, NULL, NULL);
+  js_value_t *argv[1];
+
+  if (status < 0) {
+    js_value_t *code;
+    err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
+    assert(err == 0);
+
+    js_value_t *message;
+    err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
+    assert(err == 0);
+
+    err = js_create_error(env, code, message, &argv[0]);
+    assert(err == 0);
+  } else {
+    err = js_get_null(env, &argv[0]);
+    assert(err == 0);
+  }
+
+  js_call_function(env, ctx, on_connect, 1, argv, NULL);
+
+  err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+}
+
+static void
+bare_tcp__on_write (uv_write_t *req, int status) {
+  int err;
+
+  bare_tcp_t *tcp = (bare_tcp_t *) req->data;
+
+  js_env_t *env = tcp->env;
+
+  js_handle_scope_t *scope;
+  err = js_open_handle_scope(env, &scope);
+  assert(err == 0);
+
+  js_value_t *ctx;
+  err = js_get_reference_value(env, tcp->ctx, &ctx);
+  assert(err == 0);
+
+  js_value_t *on_write;
+  err = js_get_reference_value(env, tcp->on_write, &on_write);
+  assert(err == 0);
+
+  js_value_t *argv[1];
+  js_value_t *code;
+  err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
+  assert(err == 0);
+
+  js_value_t *message;
+  err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
+  assert(err == 0);
+
+  err = js_create_error(env, code, message, &argv[0]);
+  assert(err == 0);
+  if (status < 0) {
+    js_value_t *code;
+    err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
+    assert(err == 0);
+
+    js_value_t *message;
+    err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
+    assert(err == 0);
+
+    err = js_create_error(env, code, message, &argv[0]);
+    assert(err == 0);
+  } else {
+    err = js_get_null(env, &argv[0]);
+    assert(err == 0);
+  }
+
+  js_call_function(env, ctx, on_write, 1, argv, NULL);
+
+  err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+}
+
+static void
+bare_tcp__on_shutdown (uv_shutdown_t *req, int status) {
+  int err;
+
+  bare_tcp_t *tcp = (bare_tcp_t *) req->data;
+
+  js_env_t *env = tcp->env;
+
+  js_handle_scope_t *scope;
+  err = js_open_handle_scope(env, &scope);
+  assert(err == 0);
+
+  js_value_t *ctx;
+  err = js_get_reference_value(env, tcp->ctx, &ctx);
+  assert(err == 0);
+
+  js_value_t *on_end;
+  err = js_get_reference_value(env, tcp->on_end, &on_end);
+  assert(err == 0);
+
+  js_value_t *argv[1];
+
+  if (status < 0) {
+    js_value_t *code;
+    err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
+    assert(err == 0);
+
+    js_value_t *message;
+    err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
+    assert(err == 0);
+
+    err = js_create_error(env, code, message, &argv[0]);
+    assert(err == 0);
+  } else {
+    err = js_get_null(env, &argv[0]);
+    assert(err == 0);
+  }
+
+  js_call_function(env, ctx, on_end, 1, argv, NULL);
 
   err = js_close_handle_scope(env, scope);
   assert(err == 0);
@@ -46,13 +164,13 @@ static js_value_t *
 bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   int err;
 
-  size_t argc = 2;
-  js_value_t *argv[2];
+  size_t argc = 4;
+  js_value_t *argv[4];
 
   err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
   assert(err == 0);
 
-  assert(argc == 2);
+  assert(argc == 4);
 
   uv_loop_t *loop;
   js_get_env_loop(env, &loop);
@@ -76,6 +194,12 @@ bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   assert(err == 0);
 
   err = js_create_reference(env, argv[1], 1, &tcp->on_connect);
+  assert(err == 0);
+
+  err = js_create_reference(env, argv[2], 1, &tcp->on_write);
+  assert(err == 0);
+
+  err = js_create_reference(env, argv[3], 1, &tcp->on_end);
   assert(err == 0);
 
   return handle;
@@ -154,7 +278,7 @@ bare_tcp_writev (js_env_t *env, js_callback_info_t *info) {
 
   req->data = tcp;
 
-  err = uv_write(req, (uv_stream_t *) &tcp->handle, bufs, bufs_len, NULL);
+  err = uv_write(req, (uv_stream_t *) &tcp->handle, bufs, bufs_len, bare_tcp__on_write);
 
   free(bufs);
 
@@ -167,24 +291,55 @@ bare_tcp_writev (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-init (js_env_t *env, js_value_t *exports) {
-  {
-    js_value_t *fn;
-    js_create_function(env, "init", -1, bare_tcp_init, NULL, &fn);
-    js_set_named_property(env, exports, "init", fn);
+bare_tcp_end (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 1;
+  js_value_t *argv[1];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 1);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  uv_shutdown_t *req = &tcp->requests.shutdown;
+
+  req->data = tcp;
+
+  err = uv_shutdown(req, (uv_stream_t *) &tcp->handle, bare_tcp__on_shutdown);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
   }
-  {
-    js_value_t *fn;
-    js_create_function(env, "connect", -1, bare_tcp_connect, NULL, &fn);
-    js_set_named_property(env, exports, "connect", fn);
+
+  return NULL;
+}
+
+static js_value_t *
+bare_tcp_exports (js_env_t *env, js_value_t *exports) {
+  int err;
+
+#define V(name, fn) \
+  { \
+    js_value_t *val; \
+    err = js_create_function(env, name, -1, fn, NULL, &val); \
+    assert(err == 0); \
+    err = js_set_named_property(env, exports, name, val); \
+    assert(err == 0); \
   }
-  {
-    js_value_t *fn;
-    js_create_function(env, "writev", -1, bare_tcp_writev, NULL, &fn);
-    js_set_named_property(env, exports, "writev", fn);
-  }
+
+  V("init", bare_tcp_init)
+  V("connect", bare_tcp_connect)
+  V("writev", bare_tcp_writev)
+  V("end", bare_tcp_end)
+#undef V
 
   return exports;
 }
 
-BARE_MODULE(bare_tcp, init)
+BARE_MODULE(bare_tcp, bare_tcp_exports)
