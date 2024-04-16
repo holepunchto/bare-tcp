@@ -1,9 +1,11 @@
 const test = require('brittle')
 const { Socket } = require('.')
 
-// wip, testing manually with netcat
-test('socket connect', (t) => {
-  t.plan(1)
+// working in progress
+// testing manually with netcat
+// > echo 'echo' | nc -k -l 8880
+test('socket read and write', (t) => {
+  t.plan(2)
 
   const socket = new Socket()
   socket.connect(8880, '127.0.0.1')
@@ -11,5 +13,9 @@ test('socket connect', (t) => {
   socket.once('connect', () => {
     socket.end('hello world\n')
     t.pass()
+
+    socket.on('data', data => {
+      t.alike('echo\n', data.toString())
+    })
   })
 })
