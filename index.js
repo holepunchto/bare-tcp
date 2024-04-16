@@ -24,6 +24,14 @@ exports.Socket = class TCPSocket extends Duplex {
     binding.connect(this._handle, port, host)
   }
 
+  ref () {
+    binding.ref(this._handle)
+  }
+
+  unref () {
+    binding.unref(this._handle)
+  }
+
   _read (cb) {
     if (!this._reading) {
       this._reading = true

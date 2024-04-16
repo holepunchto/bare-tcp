@@ -515,6 +515,48 @@ bare_tcp_close (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_ref (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 1;
+  js_value_t *argv[1];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 1);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  uv_ref((uv_handle_t *) &tcp->handle);
+
+  return NULL;
+}
+
+static js_value_t *
+bare_tcp_unref (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 1;
+  js_value_t *argv[1];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 1);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  uv_unref((uv_handle_t *) &tcp->handle);
+
+  return NULL;
+}
+
+static js_value_t *
 bare_tcp_exports (js_env_t *env, js_value_t *exports) {
   int err;
 
@@ -534,6 +576,8 @@ bare_tcp_exports (js_env_t *env, js_value_t *exports) {
   V("writev", bare_tcp_writev)
   V("end", bare_tcp_end)
   V("close", bare_tcp_close)
+  V("ref", bare_tcp_ref)
+  V("unref", bare_tcp_unref)
 #undef V
 
   return exports;
