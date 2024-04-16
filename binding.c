@@ -20,6 +20,7 @@ typedef struct {
   js_ref_t *on_read;
   js_ref_t *on_write;
   js_ref_t *on_end;
+  js_ref_t *on_close;
 } bare_tcp_t;
 
 static void
@@ -217,6 +218,50 @@ bare_tcp__on_shutdown (uv_shutdown_t *req, int status) {
 }
 
 static void
+bare_tcp__on_close (uv_handle_t *handle) {
+  int err;
+
+  bare_tcp_t *tcp = (bare_tcp_t *) handle;
+
+  js_env_t *env = tcp->env;
+
+  js_handle_scope_t *scope;
+  err = js_open_handle_scope(env, &scope);
+  assert(err == 0);
+
+  js_value_t *ctx;
+  err = js_get_reference_value(env, tcp->ctx, &ctx);
+  assert(err == 0);
+
+  js_value_t *on_close;
+  err = js_get_reference_value(env, tcp->on_close, &on_close);
+  assert(err == 0);
+
+  js_call_function(env, ctx, on_close, 0, NULL, NULL);
+
+  err = js_delete_reference(env, tcp->on_connect);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_read);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_write);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_end);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_close);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->ctx);
+  assert(err == 0);
+
+  err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+}
+
+static void
 bare_tcp__on_alloc (uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   bare_tcp_t *tcp = (bare_tcp_t *) handle;
 
@@ -227,13 +272,13 @@ static js_value_t *
 bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   int err;
 
-  size_t argc = 6;
-  js_value_t *argv[6];
+  size_t argc = 7;
+  js_value_t *argv[7];
 
   err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
   assert(err == 0);
 
-  assert(argc == 6);
+  assert(argc == 7);
 
   uv_loop_t *loop;
   js_get_env_loop(env, &loop);
@@ -269,6 +314,9 @@ bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   assert(err == 0);
 
   err = js_create_reference(env, argv[5], 1, &tcp->on_end);
+  assert(err == 0);
+
+  err = js_create_reference(env, argv[6], 1, &tcp->on_close);
   assert(err == 0);
 
   return handle;
@@ -446,6 +494,27 @@ bare_tcp_end (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_close (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 1;
+  js_value_t *argv[1];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 1);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  uv_close((uv_handle_t *) &tcp->handle, bare_tcp__on_close);
+
+  return NULL;
+}
+
+static js_value_t *
 bare_tcp_exports (js_env_t *env, js_value_t *exports) {
   int err;
 
@@ -464,6 +533,7 @@ bare_tcp_exports (js_env_t *env, js_value_t *exports) {
   V("pause", bare_tcp_pause)
   V("writev", bare_tcp_writev)
   V("end", bare_tcp_end)
+  V("close", bare_tcp_close)
 #undef V
 
   return exports;

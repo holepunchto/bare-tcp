@@ -10,12 +10,14 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._pendingWrite = null
     this._pendingFinal = null
+    this._pendingDestroy = null
 
     this._reading = false
+    this._closing = false
 
     this._buffer = Buffer.alloc(defaultReadBufferSize)
 
-    this._handle = binding.init(this._buffer, this, this._onconnect, this._onread, this._onwrite, this._onfinal)
+    this._handle = binding.init(this._buffer, this, this._onconnect, this._onread, this._onwrite, this._onfinal, this._onclose)
   }
 
   connect (port, host) {
@@ -41,6 +43,19 @@ exports.Socket = class TCPSocket extends Duplex {
     binding.end(this._handle)
   }
 
+  _predestroy () {
+    if (this._closing) return
+    this._closing = true
+    binding.close(this._handle)
+  }
+
+  _destroy (cb) {
+    if (this._closing) return cb(null)
+    this._closing = true
+    this._pendingDestroy = cb
+    binding.close(this._handle)
+  }
+
   _continueWrite (err) {
     if (this._pendingWrite === null) return
     const cb = this._pendingWrite
@@ -55,12 +70,24 @@ exports.Socket = class TCPSocket extends Duplex {
     cb(err)
   }
 
+  _continueDestroy () {
+    if (this._pendingDestroy === null) return
+    const cb = this._pendingDestroy
+    this._pendingDestroy = null
+    cb(null)
+  }
+
   _onconnect (err) {
     if (!err) this.emit('connect')
   }
 
   _onread (err, read) {
-    if (err || read === 0) {
+    if (err) {
+      this.destroy(err)
+      return
+    }
+
+    if (read === 0) {
       this.push(null)
       return
     }
@@ -80,6 +107,11 @@ exports.Socket = class TCPSocket extends Duplex {
 
   _onfinal (err) {
     this._continueFinal(err)
+  }
+
+  _onclose () {
+    this._handle = null
+    this._continueDestroy()
   }
 }
 
