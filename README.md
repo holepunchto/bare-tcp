@@ -1,6 +1,10 @@
 # bare-tcp
 
-**WIP..**
+Native TCP Sockets for JavaScript.
+
+```
+npm i bare-tcp
+```
 
 ## License
 

@@ -1,3 +1,4 @@
+/* global Bare */
 const EventEmitter = require('bare-events')
 const { Duplex } = require('streamx')
 const binding = require('./binding')
@@ -18,6 +19,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._buffer = Buffer.alloc(defaultReadBufferSize)
 
     this._handle = binding.init(this._buffer, this, noop, this._onconnect, this._onread, this._onwrite, this._onfinal, this._onclose)
+
+    TCPSocket._sockets.add(this)
   }
 
   connect (port, host) {
@@ -55,6 +58,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     if (this._closing) return
     this._closing = true
     binding.close(this._handle)
+    TCPSocket._sockets.delete(this)
   }
 
   _destroy (cb) {
@@ -62,6 +66,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._closing = true
     this._pendingDestroy = cb
     binding.close(this._handle)
+    TCPSocket._sockets.delete(this)
   }
 
   _continueWrite (err) {
@@ -121,18 +126,49 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._handle = null
     this._continueDestroy()
   }
+
+  static _sockets = new Set()
 }
 
-exports.Server = class TCPServer extends EventEmitter {
+const Server = exports.Server = class TCPServer extends EventEmitter {
   constructor () {
     super()
 
+    this.closing = false
+    this.connections = new Set()
+
     this._handle = binding.init(empty, this, this._onconnection, noop, noop, noop, noop, this._onclose)
+
+    TCPServer._servers.add(this)
   }
 
   listen (port, host, backlog = 511) {
+    if (this.closing) throw new Error('Server is closed')
+
     binding.bind(this._handle, port, host, backlog)
+
     return this
+  }
+
+  close () {
+    if (this.closing) return
+    this.closing = true
+    this._closeMaybe()
+  }
+
+  ref () {
+    binding.ref(this._handle)
+  }
+
+  unref () {
+    binding.unref(this._handle)
+  }
+
+  _closeMaybe () {
+    if (this.closing && this.connections.size === 0) {
+      binding.close(this._handle)
+      TCPServer._servers.delete(this)
+    }
   }
 
   _onconnection (err) {
@@ -141,12 +177,44 @@ exports.Server = class TCPServer extends EventEmitter {
       return
     }
 
-    const s = new Socket()
-    binding.accept(this._handle, s._handle)
+    if (this.closing) return
 
-    this.emit('connection', s)
+    const socket = new Socket()
+
+    try {
+      binding.accept(this._handle, socket._handle)
+
+      socket.on('close', () => {
+        this.connections.delete(socket)
+        this._closeMaybe()
+      })
+
+      this.emit('connection', socket)
+    } catch (err) {
+      socket.destroy()
+
+      throw err
+    }
   }
+
+  _onclose () {
+    this._handle = null
+    this.emit('close')
+  }
+
+  static _servers = new Set()
 }
+
+Bare
+  .on('exit', () => {
+    for (const socket of Socket._sockets) {
+      socket.destroy()
+    }
+
+    for (const server of Server._servers) {
+      server.close()
+    }
+  })
 
 const empty = Buffer.alloc(0)
 
