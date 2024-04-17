@@ -16,12 +16,57 @@ typedef struct {
 
   js_env_t *env;
   js_ref_t *ctx;
+  js_ref_t *on_connection;
   js_ref_t *on_connect;
   js_ref_t *on_read;
   js_ref_t *on_write;
   js_ref_t *on_end;
   js_ref_t *on_close;
 } bare_tcp_t;
+
+static void
+bare_tcp__on_connection (uv_stream_t *server, int status) {
+  int err;
+
+  bare_tcp_t *tcp = (bare_tcp_t *) server;
+
+  js_env_t *env = tcp->env;
+
+  js_handle_scope_t *scope;
+  err = js_open_handle_scope(env, &scope);
+  assert(err == 0);
+
+  js_value_t *ctx;
+  err = js_get_reference_value(env, tcp->ctx, &ctx);
+  assert(err == 0);
+
+  js_value_t *on_connection;
+  err = js_get_reference_value(env, tcp->on_connection, &on_connection);
+  assert(err == 0);
+
+  js_value_t *argv[1];
+
+  if (status < 0) {
+    js_value_t *code;
+    err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
+    assert(err == 0);
+
+    js_value_t *message;
+    err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
+    assert(err == 0);
+
+    err = js_create_error(env, code, message, &argv[0]);
+    assert(err == 0);
+  } else {
+    err = js_get_null(env, &argv[0]);
+    assert(err == 0);
+  }
+
+  js_call_function(env, ctx, on_connection, 1, argv, NULL);
+
+  err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+}
 
 static void
 bare_tcp__on_connect (uv_connect_t *req, int status) {
@@ -239,6 +284,9 @@ bare_tcp__on_close (uv_handle_t *handle) {
 
   js_call_function(env, ctx, on_close, 0, NULL, NULL);
 
+  err = js_delete_reference(env, tcp->on_connection);
+  assert(err == 0);
+
   err = js_delete_reference(env, tcp->on_connect);
   assert(err == 0);
 
@@ -272,13 +320,13 @@ static js_value_t *
 bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   int err;
 
-  size_t argc = 7;
-  js_value_t *argv[7];
+  size_t argc = 8;
+  js_value_t *argv[8];
 
   err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
   assert(err == 0);
 
-  assert(argc == 7);
+  assert(argc == 8);
 
   uv_loop_t *loop;
   js_get_env_loop(env, &loop);
@@ -304,19 +352,22 @@ bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   err = js_create_reference(env, argv[1], 1, &tcp->ctx);
   assert(err == 0);
 
-  err = js_create_reference(env, argv[2], 1, &tcp->on_connect);
+  err = js_create_reference(env, argv[2], 1, &tcp->on_connection);
   assert(err == 0);
 
-  err = js_create_reference(env, argv[3], 1, &tcp->on_read);
+  err = js_create_reference(env, argv[3], 1, &tcp->on_connect);
   assert(err == 0);
 
-  err = js_create_reference(env, argv[4], 1, &tcp->on_write);
+  err = js_create_reference(env, argv[4], 1, &tcp->on_read);
   assert(err == 0);
 
-  err = js_create_reference(env, argv[5], 1, &tcp->on_end);
+  err = js_create_reference(env, argv[5], 1, &tcp->on_write);
   assert(err == 0);
 
-  err = js_create_reference(env, argv[6], 1, &tcp->on_close);
+  err = js_create_reference(env, argv[6], 1, &tcp->on_end);
+  assert(err == 0);
+
+  err = js_create_reference(env, argv[7], 1, &tcp->on_close);
   assert(err == 0);
 
   return handle;
@@ -349,10 +400,104 @@ bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
   struct sockaddr_in addr;
   err = uv_ip4_addr((char *) ip, port, &addr);
 
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
+
   uv_connect_t *req = &tcp->requests.connect;
+
   req->data = tcp;
 
-  uv_tcp_connect(req, &tcp->handle, (struct sockaddr *) &addr, bare_tcp__on_connect);
+  err = uv_tcp_connect(req, &tcp->handle, (struct sockaddr *) &addr, bare_tcp__on_connect);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
+
+  return NULL;
+}
+
+static js_value_t *
+bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 4;
+  js_value_t *argv[4];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 4);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  uint32_t port;
+  err = js_get_value_uint32(env, argv[1], &port);
+  assert(err == 0);
+
+  utf8_t ip[17];
+  err = js_get_value_string_utf8(env, argv[2], ip, 17, NULL);
+  assert(err == 0);
+
+  uint32_t backlog;
+  err = js_get_value_uint32(env, argv[3], &backlog);
+  assert(err == 0);
+
+  struct sockaddr_in addr;
+  err = uv_ip4_addr((char *) ip, port, &addr);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
+
+  err = uv_tcp_bind(&tcp->handle, (struct sockaddr *) &addr, 0);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
+
+  err = uv_listen((uv_stream_t *) &tcp->handle, backlog, bare_tcp__on_connection);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
+
+  return NULL;
+}
+
+static js_value_t *
+bare_tcp_accept (js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 2;
+  js_value_t *argv[2];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 2);
+
+  bare_tcp_t *server;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &server, NULL);
+  assert(err == 0);
+
+  bare_tcp_t *client;
+  err = js_get_arraybuffer_info(env, argv[1], (void **) &client, NULL);
+  assert(err == 0);
+
+  err = uv_accept((uv_stream_t *) &server->handle, (uv_stream_t *) &client->handle);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
 
   return NULL;
 }
@@ -571,6 +716,8 @@ bare_tcp_exports (js_env_t *env, js_value_t *exports) {
 
   V("init", bare_tcp_init)
   V("connect", bare_tcp_connect)
+  V("bind", bare_tcp_bind)
+  V("accept", bare_tcp_accept)
   V("resume", bare_tcp_resume)
   V("pause", bare_tcp_pause)
   V("writev", bare_tcp_writev)

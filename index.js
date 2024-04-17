@@ -1,10 +1,10 @@
-// const EventEmitter = require('bare-events')
+const EventEmitter = require('bare-events')
 const { Duplex } = require('streamx')
 const binding = require('./binding')
 
 const defaultReadBufferSize = 65536
 
-exports.Socket = class TCPSocket extends Duplex {
+const Socket = exports.Socket = class TCPSocket extends Duplex {
   constructor () {
     super({ mapWritable, eager: true })
 
@@ -17,7 +17,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._buffer = Buffer.alloc(defaultReadBufferSize)
 
-    this._handle = binding.init(this._buffer, this, this._onconnect, this._onread, this._onwrite, this._onfinal, this._onclose)
+    this._handle = binding.init(this._buffer, this, noop, this._onconnect, this._onread, this._onwrite, this._onfinal, this._onclose)
   }
 
   connect (port, host) {
@@ -122,6 +122,35 @@ exports.Socket = class TCPSocket extends Duplex {
     this._continueDestroy()
   }
 }
+
+exports.Server = class TCPServer extends EventEmitter {
+  constructor () {
+    super()
+
+    this._handle = binding.init(empty, this, this._onconnection, noop, noop, noop, noop, this._onclose)
+  }
+
+  listen (port, host, backlog = 511) {
+    binding.bind(this._handle, port, host, backlog)
+    return this
+  }
+
+  _onconnection (err) {
+    if (err) {
+      this.emit('error', err)
+      return
+    }
+
+    const s = new Socket()
+    binding.accept(this._handle, s._handle)
+
+    this.emit('connection', s)
+  }
+}
+
+const empty = Buffer.alloc(0)
+
+function noop () {}
 
 function mapWritable (buf) {
   return typeof buf === 'string' ? Buffer.from(buf) : buf

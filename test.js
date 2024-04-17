@@ -1,21 +1,16 @@
 const test = require('brittle')
-const { Socket } = require('.')
+const { Socket, Server } = require('.')
 
-// working in progress
-// testing manually with netcat
-// > echo 'echo' | nc -k -l 8880
-test('socket read and write', (t) => {
-  t.plan(2)
+test('server + client', (t) => {
+  t.plan(1)
 
-  const socket = new Socket()
-  socket.connect(8880, '127.0.0.1')
-
-  socket.once('connect', () => {
-    socket.end('hello world\n')
-    t.pass()
-
-    socket.on('data', data => {
-      t.alike('echo\n', data.toString())
+  new Server()
+    .listen(8880, '127.0.0.1')
+    .on('connection', (socket) => {
+      socket.on('data', data => t.alike(data.toString(), 'hello world'))
     })
-  })
+
+  const client = new Socket()
+  client.connect(8880, '127.0.0.1')
+  client.once('connect', () => client.end('hello world'))
 })

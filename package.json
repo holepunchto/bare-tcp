@@ -17,6 +17,7 @@
   "author": "Holepunch Inc",
   "license": "Apache-2.0",
   "dependencies": {
+    "bare-events": "^2.2.2",
     "streamx": "^2.16.1"
   },
   "devDependencies": {
