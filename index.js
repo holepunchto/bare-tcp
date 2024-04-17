@@ -138,6 +138,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   constructor () {
     super()
 
+    this.host = null
+    this.port = null
     this.closing = false
     this.connections = new Set()
 
@@ -146,10 +148,19 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     TCPServer._servers.add(this)
   }
 
-  listen (port, host = '0.0.0.0', backlog = 511) {
+  listen (port = 0, host = '0.0.0.0', backlog = 511, onlistening) {
     if (this.closing) throw new Error('Server is closed')
 
-    binding.bind(this._handle, port, host, backlog)
+    if (typeof port === 'function') return this.listen(undefined, undefined, undefined, port)
+    if (typeof host === 'function') return this.listen(port, undefined, undefined, host)
+    if (typeof backlog === 'function') return this.listen(port, host, undefined, backlog)
+
+    if (onlistening) this.once('listening', onlistening)
+
+    this.port = binding.bind(this._handle, port, host, backlog)
+    this.host = host
+
+    this.emit('listening')
 
     return this
   }
@@ -158,6 +169,12 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     if (this.closing) return
     this.closing = true
     this._closeMaybe()
+  }
+
+  address () {
+    if (!this.host) throw new Error('Server is not bound')
+
+    return { address: this.host, family: 4, port: this.port }
   }
 
   ref () {

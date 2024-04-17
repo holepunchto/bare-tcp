@@ -13,9 +13,10 @@ const { createServer, createSocket } = require('bare-tcp')
 
 const server = createServer()
 server.on('connection', (_socket) => _socket.on('data', console.log))
-server.listen(10000)
+server.listen(() => console.log('server is up'))
 
-const socket = createSocket(10000)
+const { port } = server.address()
+const socket = createSocket(port)
 socket.write('hello world')
 ```
 

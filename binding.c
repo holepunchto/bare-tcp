@@ -448,6 +448,8 @@ bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
   assert(err == 0);
 
   struct sockaddr_in addr;
+  int addr_len = sizeof(struct sockaddr_in);
+
   err = uv_ip4_addr((char *) ip, port, &addr);
 
   if (err < 0) {
@@ -469,7 +471,21 @@ bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
     return NULL;
   }
 
-  return NULL;
+  struct sockaddr_storage name;
+  err = uv_tcp_getsockname(&tcp->handle, (struct sockaddr *) &name, &addr_len);
+
+  if (err < 0) {
+    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    return NULL;
+  }
+
+  int local_port = ntohs(((struct sockaddr_in *) &name)->sin_port);
+
+  js_value_t *res;
+  err = js_create_uint32(env, local_port, &res);
+  assert(err == 0);
+
+  return res;
 }
 
 static js_value_t *
