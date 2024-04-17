@@ -23,8 +23,12 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     TCPSocket._sockets.add(this)
   }
 
-  connect (port, host) {
+  connect (port, host = 'localhost') {
+    if (host === 'localhost') host = '127.0.0.1'
+
     binding.connect(this._handle, port, host)
+
+    return this
   }
 
   ref () {
@@ -142,7 +146,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     TCPServer._servers.add(this)
   }
 
-  listen (port, host, backlog = 511) {
+  listen (port, host = '0.0.0.0', backlog = 511) {
     if (this.closing) throw new Error('Server is closed')
 
     binding.bind(this._handle, port, host, backlog)
@@ -203,6 +207,14 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   }
 
   static _servers = new Set()
+}
+
+exports.createSocket = function createSocket (...args) {
+  return new Socket().connect(...args)
+}
+
+exports.createServer = function createServer () {
+  return new Server()
 }
 
 Bare

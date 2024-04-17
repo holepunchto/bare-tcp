@@ -5,7 +5,7 @@ test('server + client', (t) => {
   t.plan(2)
 
   const server = new Server()
-    .listen(8880, '127.0.0.1')
+    .listen(10000)
     .on('connection', (socket) => {
       socket
         .on('data', data => {
@@ -18,6 +18,7 @@ test('server + client', (t) => {
     .on('close', () => t.pass('server closed'))
 
   const client = new Socket()
-  client.connect(8880, '127.0.0.1')
-  client.end('hello world')
+  client
+    .connect(10000)
+    .end('hello world')
 })
