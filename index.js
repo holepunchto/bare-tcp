@@ -3,11 +3,19 @@ const EventEmitter = require('bare-events')
 const { Duplex } = require('streamx')
 const binding = require('./binding')
 
-const defaultReadBufferSize = 65536
+const DEFAULT_READ_BUFFER = 65536
 
 const Socket = exports.Socket = class TCPSocket extends Duplex {
-  constructor () {
+  constructor (opts = {}) {
     super({ mapWritable, eager: true })
+
+    const {
+      readBufferSize = DEFAULT_READ_BUFFER,
+      allowHalfOpen = true
+    } = opts
+
+    this._readBufferSize = readBufferSize
+    this._allowHalfOpen = allowHalfOpen
 
     this._pendingWrite = null
     this._pendingFinal = null
@@ -16,7 +24,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._reading = false
     this._closing = false
 
-    this._buffer = Buffer.alloc(defaultReadBufferSize)
+    this._buffer = Buffer.alloc(this._readBufferSize)
 
     this._handle = binding.init(this._buffer, this, noop, this._onconnect, this._onread, this._onwrite, this._onfinal, this._onclose)
 
@@ -106,6 +114,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
     if (read === 0) {
       this.push(null)
+      if (this._allowHalfOpen === false) this.end()
       return
     }
 
@@ -135,8 +144,16 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 }
 
 const Server = exports.Server = class TCPServer extends EventEmitter {
-  constructor () {
+  constructor (opts = {}) {
     super()
+
+    const {
+      readBufferSize = DEFAULT_READ_BUFFER,
+      allowHalfOpen = true
+    } = opts
+
+    this._readBufferSize = readBufferSize
+    this._allowHalfOpen = allowHalfOpen
 
     this.host = null
     this.port = null
@@ -200,7 +217,10 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
     if (this.closing) return
 
-    const socket = new Socket()
+    const socket = new Socket({
+      readBufferSize: this._readBufferSize,
+      allowHalfOpen: this._allowHalfOpen
+    })
 
     try {
       binding.accept(this._handle, socket._handle)
