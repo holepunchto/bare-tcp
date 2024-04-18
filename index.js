@@ -225,6 +225,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     try {
       binding.accept(this._handle, socket._handle)
 
+      this.connections.add(socket)
+
       socket.on('close', () => {
         this.connections.delete(socket)
         this._closeMaybe()

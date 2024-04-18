@@ -1,27 +1,26 @@
 const test = require('brittle')
-const { Socket, Server } = require('.')
+const { createServer, createSocket } = require('.')
 
-test('server + client', (t) => {
+test('server + client', async (t) => {
   t.plan(2)
 
-  const server = new Server()
-    .listen()
+  const lc = t.test('lifecycle')
+  lc.plan(1)
+
+  const server = createServer()
+    .on('close', () => t.pass('server closed'))
     .on('connection', (socket) => {
       socket
-        .on('data', data => {
-          t.alike(data.toString(), 'hello world')
-
-          // close
-          socket.end()
-          server.close()
-        })
+        .on('data', (data) => lc.alike(data.toString(), 'hello world'))
+        .end()
     })
-    .on('close', () => t.pass('server closed'))
+    .listen()
 
   const { port } = server.address()
 
-  const client = new Socket()
-  client
-    .connect(port)
-    .end('hello world')
+  createSocket(port).end('hello world')
+
+  await lc
+
+  server.close()
 })
