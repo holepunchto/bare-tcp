@@ -73,9 +73,9 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     cb(null)
   }
 
-  _writev (chunk, cb) {
-    this._pendingWrite = cb
-    binding.writev(this._handle, chunk)
+  _writev (datas, cb) {
+    this._pendingWrite = [cb, datas]
+    binding.writev(this._handle, datas)
   }
 
   _final (cb) {
@@ -100,7 +100,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
   _continueWrite (err) {
     if (this._pendingWrite === null) return
-    const cb = this._pendingWrite
+    const cb = this._pendingWrite[0]
     this._pendingWrite = null
     cb(err)
   }
