@@ -173,9 +173,16 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   listen (port = 0, host = '0.0.0.0', backlog = 511, onlistening) {
     if (this.closing) throw new Error('Server is closed')
 
-    if (typeof port === 'function') return this.listen(undefined, undefined, undefined, port)
-    if (typeof host === 'function') return this.listen(port, undefined, undefined, host)
-    if (typeof backlog === 'function') return this.listen(port, host, undefined, backlog)
+    if (typeof port === 'function') {
+      onlistening = port
+      port = 0
+    } else if (typeof host === 'function') {
+      onlistening = host
+      host = '0.0.0.0'
+    } else if (typeof backlog === 'function') {
+      onlistening = backlog
+      backlog = 511
+    }
 
     if (onlistening) this.once('listening', onlistening)
 
