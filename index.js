@@ -103,7 +103,12 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onconnect (err) {
-    if (!err) this.emit('connect')
+    if (err) {
+      this.destroy(err)
+      return
+    }
+
+    this.emit('connect')
   }
 
   _onread (err, read) {
