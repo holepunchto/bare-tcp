@@ -3,14 +3,14 @@ const EventEmitter = require('bare-events')
 const { Duplex } = require('streamx')
 const binding = require('./binding')
 
-const DEFAULT_READ_BUFFER = 65536
+const defaultReadBufferSize = 65536
 
 const Socket = exports.Socket = class TCPSocket extends Duplex {
   constructor (opts = {}) {
-    super({ mapWritable, eager: true })
+    super({ mapWritable, eagerOpen: true })
 
     const {
-      readBufferSize = DEFAULT_READ_BUFFER,
+      readBufferSize = defaultReadBufferSize,
       allowHalfOpen = true
     } = opts
 
@@ -148,7 +148,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     super()
 
     const {
-      readBufferSize = DEFAULT_READ_BUFFER,
+      readBufferSize = defaultReadBufferSize,
       allowHalfOpen = true
     } = opts
 
