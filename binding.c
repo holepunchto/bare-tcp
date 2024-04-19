@@ -186,16 +186,6 @@ bare_tcp__on_write (uv_write_t *req, int status) {
   assert(err == 0);
 
   js_value_t *argv[1];
-  js_value_t *code;
-  err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
-  assert(err == 0);
-
-  js_value_t *message;
-  err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
-  assert(err == 0);
-
-  err = js_create_error(env, code, message, &argv[0]);
-  assert(err == 0);
 
   if (status < 0) {
     js_value_t *code;
