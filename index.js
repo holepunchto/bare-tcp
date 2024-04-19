@@ -31,8 +31,25 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     TCPSocket._sockets.add(this)
   }
 
-  connect (port, host = 'localhost') {
+  connect (port, host = 'localhost', opts = {}, onconnect) {
+    if (typeof port !== 'number') {
+      opts = port || {}
+      port = opts.port || 0
+      host = opts.host || 'localhost'
+    } else if (typeof host === 'function') {
+      onconnect = host
+      host = 'localhost'
+    } else if (typeof host !== 'string') {
+      opts = host || {}
+      host = opts.host || 'localhost'
+    } else if (typeof opts === 'function') {
+      onconnect = opts
+      opts = {}
+    }
+
     if (host === 'localhost') host = '127.0.0.1'
+
+    if (onconnect) this.once('connect', onconnect)
 
     binding.connect(this._handle, port, host)
 
@@ -149,7 +166,12 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 }
 
 const Server = exports.Server = class TCPServer extends EventEmitter {
-  constructor (opts = {}) {
+  constructor (opts = {}, onconnection) {
+    if (typeof opts === 'function') {
+      onconnection = opts
+      opts = {}
+    }
+
     super()
 
     const {
@@ -166,6 +188,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     this.connections = new Set()
 
     this._handle = binding.init(empty, this, this._onconnection, noop, noop, noop, noop, this._onclose)
+
+    if (onconnection) this.on('connection', onconnection)
 
     TCPServer._servers.add(this)
   }
@@ -260,12 +284,27 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   static _servers = new Set()
 }
 
-exports.createSocket = function createSocket (...args) {
-  return new Socket().connect(...args)
+exports.createConnection = function createConnection (port, host, opts, onconnect) {
+  if (typeof port !== 'number') {
+    opts = port || {}
+    port = opts.port || 0
+    host = opts.host || 'localhost'
+  } else if (typeof host === 'function') {
+    onconnect = host
+    host = 'localhost'
+  } else if (typeof host !== 'string') {
+    opts = host || {}
+    host = opts.host || 'localhost'
+  } else if (typeof opts === 'function') {
+    onconnect = opts
+    opts = {}
+  }
+
+  return new Socket(opts).connect(port, host, opts, onconnect)
 }
 
-exports.createServer = function createServer () {
-  return new Server()
+exports.createServer = function createServer (opts, onconnection) {
+  return new Server(opts, onconnection)
 }
 
 Bare

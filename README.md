@@ -16,7 +16,7 @@ server.on('connection', (_socket) => _socket.on('data', console.log))
 server.listen(() => console.log('server is up'))
 
 const { port } = server.address()
-const socket = createSocket(port)
+const socket = createConnection(port)
 socket.write('hello world')
 ```
 

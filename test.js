@@ -1,5 +1,5 @@
 const test = require('brittle')
-const { createServer, createSocket } = require('.')
+const { createServer, createConnection } = require('.')
 
 test('server + client', async (t) => {
   t.plan(2)
@@ -18,7 +18,7 @@ test('server + client', async (t) => {
 
   const { port } = server.address()
 
-  createSocket(port).end('hello world')
+  createConnection(port).end('hello world')
 
   await lc
 
