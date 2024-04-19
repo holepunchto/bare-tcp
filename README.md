@@ -9,7 +9,7 @@ npm i bare-tcp
 ## Usage
 
 ``` js
-const { createServer, createSocket } = require('bare-tcp')
+const { createServer, createConnection } = require('bare-tcp')
 
 const server = createServer()
 server.on('connection', (_socket) => _socket.on('data', console.log))
