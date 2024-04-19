@@ -1,7 +1,7 @@
 {
   "name": "bare-tcp",
-  "version": "0.0.0",
-  "description": "...",
+  "version": "1.0.0",
+  "description": "Native TCP sockets for JavaScript",
   "main": "index.js",
   "files": [
     "index.js",
