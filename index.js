@@ -43,6 +43,14 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     TCPSocket._sockets.add(this)
   }
 
+  get connecting () {
+    return (this._state & constants.state.CONNECTING) !== 0
+  }
+
+  get pending () {
+    return (this._state & constants.state.CONNECTED) === 0
+  }
+
   connect (port, host = 'localhost', opts = {}, onconnect) {
     if (typeof port !== 'number') {
       opts = port || {}
@@ -234,6 +242,18 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     TCPServer._servers.add(this)
   }
 
+  get listening () {
+    return (this._state & constants.state.LISTENING) !== 0
+  }
+
+  address () {
+    if ((this._state & constants.state.LISTENING) === 0) {
+      throw errors.SERVER_IS_NOT_LISTENING('Server is not listening')
+    }
+
+    return { address: this._host, family: 4, port: this._port }
+  }
+
   listen (port = 0, host = '0.0.0.0', backlog = 511, onlistening) {
     if ((this._state & constants.state.LISTENING) !== 0) {
       throw errors.SERVER_IS_LISTENING('Server is already listening')
@@ -269,14 +289,6 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
     this._closeMaybe()
-  }
-
-  address () {
-    if ((this._state & constants.state.LISTENING) === 0) {
-      throw errors.SERVER_IS_NOT_LISTENING('Server is not listening')
-    }
-
-    return { address: this._host, family: 4, port: this._port }
   }
 
   ref () {
