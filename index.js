@@ -285,7 +285,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     return this
   }
 
-  close () {
+  close (onclose) {
+    if (onclose) this.once('close', onclose)
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
     this._closeMaybe()
