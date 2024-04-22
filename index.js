@@ -183,7 +183,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     const copy = Buffer.allocUnsafe(read)
     copy.set(this._buffer.subarray(0, read))
 
-    if (this.push(copy) === false) {
+    if (this.push(copy) === false && this.destroying === false) {
       this._state &= ~constants.state.READING
       binding.pause(this._handle)
     }
