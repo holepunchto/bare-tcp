@@ -2,12 +2,18 @@
   "name": "bare-tcp",
   "version": "1.0.0",
   "description": "Native TCP sockets for JavaScript",
-  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package": "./package.json",
+    "./constants": "./lib/constants.js",
+    "./errors": "./lib/errors.js"
+  },
   "files": [
     "index.js",
     "binding.c",
     "binding.js",
     "CMakeLists.txt",
+    "lib",
     "prebuilds"
   ],
   "addon": true,
