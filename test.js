@@ -125,12 +125,12 @@ test('server.listen arguments', (t) => {
     server2.close()
   })
 
-  const server3 = createServer().listen(99234, () => {
+  const server3 = createServer().listen(60000, () => {
     args.pass('port and listener')
     server3.close()
   })
 
-  const server4 = createServer().listen(99235, '0.0.0.0', () => {
+  const server4 = createServer().listen(60001, '0.0.0.0', () => {
     args.pass('port, host and listener')
     server4.close()
   })
