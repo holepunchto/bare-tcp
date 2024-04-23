@@ -75,19 +75,20 @@ test('not accept server binding when closing', (t) => {
   t.exception(() => server.listen(), /Server is closed/)
 })
 
-test('not accept server binding when already bound', async (t) => {
+test('not accept server calling listen method twice', async (t) => {
   t.plan(1)
 
   const server = createServer().listen()
   await waitForServer(server)
 
   const { port } = server.address()
-  server.listen(port)
-  server.on('error', (err) => {
-    t.is(err.code, 'EINVAL')
 
+  try {
+    server.listen(port)
+  } catch (err) {
+    t.ok(err.code?.includes('SERVER_ALREADY_LISTEN'))
     server.close()
-  })
+  }
 })
 
 test('createConnection arguments', async (t) => {
