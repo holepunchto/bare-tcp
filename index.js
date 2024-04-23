@@ -51,19 +51,18 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
-    if (typeof port !== 'number') {
-      opts = port || {}
-      port = opts.port || 0
-      host = opts.host || 'localhost'
-    } else if (typeof host === 'function') {
+    if (typeof host === 'function') {
       onconnect = host
       host = 'localhost'
-    } else if (typeof host !== 'string') {
-      opts = host || {}
-      host = opts.host || 'localhost'
     } else if (typeof opts === 'function') {
       onconnect = opts
       opts = {}
+    }
+
+    if (typeof port === 'object' && port !== null) {
+      opts = port || {}
+      port = opts.port || 0
+      host = opts.host || 'localhost'
     }
 
     if (host === 'localhost') host = '127.0.0.1'
@@ -253,7 +252,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     return { address: this._host, family: 4, port: this._port }
   }
 
-  listen (port = 0, host = '0.0.0.0', backlog = 511, onlistening) {
+  listen (port = 0, host = '0.0.0.0', backlog = 511, opts = {}, onlistening) {
     if (this._state & constants.state.CLOSING) {
       throw errors.SERVER_IS_CLOSED('Server is closed')
     }
@@ -267,7 +266,19 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     } else if (typeof backlog === 'function') {
       onlistening = backlog
       backlog = 511
+    } else if (typeof opts === 'function') {
+      onlistening = opts
+      opts = {}
     }
+
+    if (typeof port === 'object' && port !== null) {
+      opts = port || {}
+      port = opts.port || 0
+      host = opts.host || 'localhost'
+      backlog = opts.backlog || 511
+    }
+
+    if (host === 'localhost') host = '127.0.0.1'
 
     try {
       this._port = binding.bind(this._handle, port, host, backlog)
@@ -353,19 +364,18 @@ exports.constants = constants
 exports.errors = errors
 
 exports.createConnection = function createConnection (port, host, opts, onconnect) {
-  if (typeof port !== 'number') {
-    opts = port || {}
-    port = opts.port || 0
-    host = opts.host || 'localhost'
-  } else if (typeof host === 'function') {
+  if (typeof host === 'function') {
     onconnect = host
     host = 'localhost'
-  } else if (typeof host !== 'string') {
-    opts = host || {}
-    host = opts.host || 'localhost'
   } else if (typeof opts === 'function') {
     onconnect = opts
     opts = {}
+  }
+
+  if (typeof port === 'object' && port !== null) {
+    opts = port || {}
+    port = opts.port || 0
+    host = opts.host || 'localhost'
   }
 
   return new Socket(opts).connect(port, host, opts, onconnect)
