@@ -284,7 +284,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       queueMicrotask(() => this.emit('listening'))
     } catch (err) {
       queueMicrotask(() => {
-        if (!this.closing) this.emit('error', err)
+        if ((this._state & constants.state.CLOSING) === 0) this.emit('error', err)
       })
     }
 
