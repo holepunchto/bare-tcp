@@ -274,13 +274,19 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       backlog = 511
     }
 
-    this._port = binding.bind(this._handle, port, host, backlog)
-    this._host = host
-    this._state |= constants.state.LISTENING
+    try {
+      this._port = binding.bind(this._handle, port, host, backlog)
+      this._host = host
+      this._state |= constants.state.LISTENING
 
-    if (onlistening) this.once('listening', onlistening)
+      if (onlistening) this.once('listening', onlistening)
 
-    queueMicrotask(() => this.emit('listening'))
+      queueMicrotask(() => this.emit('listening'))
+    } catch (err) {
+      queueMicrotask(() => {
+        if ((this._state & constants.state.CLOSING) === 0) this.emit('error', err)
+      })
+    }
 
     return this
   }
