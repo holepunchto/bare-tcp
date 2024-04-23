@@ -53,7 +53,7 @@ test('port already in use', async (t) => {
 
   const server2 = createServer().listen(server.address().port)
 
-  server2.on('error', function (err) {
+  server2.on('error', (err) => {
     t.is(err.code, 'EADDRINUSE', 'catch EADDRINUSE error')
 
     server.close()
@@ -62,10 +62,8 @@ test('port already in use', async (t) => {
 })
 
 test('not accept address request when not listening', (t) => {
-  t.plan(1)
-
   const server = createServer()
-  t.exception(() => server.address(), /Server is not listening/)
+  t.is(server.address(), null)
 })
 
 test('not accept server binding when closing', (t) => {
@@ -84,9 +82,12 @@ test('not accept server binding when already bound', async (t) => {
   await waitForServer(server)
 
   const { port } = server.address()
-  t.exception(() => server.listen(port), /Server is already listening/)
+  server.listen(port)
+  server.on('error', (err) => {
+    t.is(err.code, 'EINVAL')
 
-  server.close()
+    server.close()
+  })
 })
 
 test('createConnection arguments', async (t) => {
