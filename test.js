@@ -42,6 +42,7 @@ test('socket state getters', async (t) => {
   socket.connect(server.address().port)
   t.is(socket.connecting, true, 'connecting')
 
+  socket.destroy()
   server.close()
 })
 
@@ -93,8 +94,16 @@ test('createConnection arguments', async (t) => {
   await waitForServer(server)
 
   const { port } = server.address()
-  createConnection(port, () => args.pass('port and listener')).end()
-  createConnection(port, 'localhost', () => args.pass('port, host and listener')).end()
+
+  const socket1 = createConnection(port, () => {
+    args.pass('port and listener')
+    socket1.destroy()
+  })
+
+  const socket2 = createConnection(port, 'localhost', () => {
+    args.pass('port, host and listener')
+    socket2.destroy()
+  })
 
   await args
 
