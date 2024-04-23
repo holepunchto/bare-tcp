@@ -28,7 +28,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._pendingFinal = null
     this._pendingDestroy = null
 
-    this._buffer = Buffer.alloc(this._readBufferSize)
+    this._buffer = Buffer.alloc(readBufferSize)
 
     this._handle = binding.init(this._buffer, this,
       noop,
