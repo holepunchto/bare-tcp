@@ -248,7 +248,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
   address () {
     if ((this._state & constants.state.LISTENING) === 0) {
-      throw errors.SERVER_IS_NOT_LISTENING('Server is not listening')
+      return null
     }
 
     return { address: this._host, family: 4, port: this._port }
