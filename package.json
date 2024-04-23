@@ -24,7 +24,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "bare-events": "^2.2.2",
-    "streamx": "^2.16.1"
+    "bare-stream": "^1.0.0"
   },
   "devDependencies": {
     "brittle": "^3.5.0",

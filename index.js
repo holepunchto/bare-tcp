@@ -1,6 +1,6 @@
 /* global Bare */
 const EventEmitter = require('bare-events')
-const { Duplex } = require('streamx')
+const { Duplex } = require('bare-stream')
 const binding = require('./binding')
 const constants = require('./lib/constants')
 const errors = require('./lib/errors')
