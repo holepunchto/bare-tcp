@@ -18,7 +18,6 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
     this._state = 0
 
-    this._readBufferSize = readBufferSize
     this._allowHalfOpen = allowHalfOpen
 
     this._remotePort = -1
