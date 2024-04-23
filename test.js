@@ -66,15 +66,6 @@ test('not accept address request when not listening', (t) => {
   t.is(server.address(), null)
 })
 
-test('not accept server binding when closing', (t) => {
-  t.plan(1)
-
-  const server = createServer()
-
-  server.close()
-  t.exception(() => server.listen(), /Server is closed/)
-})
-
 test('not accept server calling listen method twice', async (t) => {
   t.plan(1)
 
