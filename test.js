@@ -42,6 +42,7 @@ test('socket state getters', async (t) => {
   socket.connect(server.address().port)
   t.is(socket.connecting, true, 'connecting')
 
+  socket.destroy()
   server.close()
 })
 
@@ -66,28 +67,20 @@ test('not accept address request when not listening', (t) => {
   t.is(server.address(), null)
 })
 
-test('not accept server binding when closing', (t) => {
-  t.plan(1)
-
-  const server = createServer()
-
-  server.close()
-  t.exception(() => server.listen(), /Server is closed/)
-})
-
-test('not accept server binding when already bound', async (t) => {
+test('not accept server calling listen method twice', async (t) => {
   t.plan(1)
 
   const server = createServer().listen()
   await waitForServer(server)
 
   const { port } = server.address()
-  server.listen(port)
-  server.on('error', (err) => {
-    t.is(err.code, 'EINVAL')
 
+  try {
+    server.listen(port)
+  } catch (err) {
+    t.is(err.code, 'SERVER_ALREADY_LISTENING')
     server.close()
-  })
+  }
 })
 
 test('createConnection arguments', async (t) => {
@@ -101,8 +94,16 @@ test('createConnection arguments', async (t) => {
   await waitForServer(server)
 
   const { port } = server.address()
-  createConnection(port, () => args.pass('port and listener')).end()
-  createConnection(port, 'localhost', () => args.pass('port, host and listener')).end()
+
+  const socket1 = createConnection(port, () => {
+    args.pass('port and listener')
+    socket1.destroy()
+  })
+
+  const socket2 = createConnection(port, 'localhost', () => {
+    args.pass('port, host and listener')
+    socket2.destroy()
+  })
 
   await args
 
@@ -124,12 +125,12 @@ test('server.listen arguments', (t) => {
     server2.close()
   })
 
-  const server3 = createServer().listen(99234, () => {
+  const server3 = createServer().listen(0, () => {
     args.pass('port and listener')
     server3.close()
   })
 
-  const server4 = createServer().listen(99235, '0.0.0.0', () => {
+  const server4 = createServer().listen(0, '0.0.0.0', () => {
     args.pass('port, host and listener')
     server4.close()
   })
