@@ -254,7 +254,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
   listen (port = 0, host = '0.0.0.0', backlog = 511, opts = {}, onlistening) {
     if (this._state & constants.state.LISTENING) {
-      throw errors.SERVER_ALREADY_LISTEN('Server is already listening')
+      throw errors.SERVER_ALREADY_LISTENING('Server is already listening')
     }
 
     if (this._state & constants.state.CLOSING) {

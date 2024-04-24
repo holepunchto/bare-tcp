@@ -78,7 +78,7 @@ test('not accept server calling listen method twice', async (t) => {
   try {
     server.listen(port)
   } catch (err) {
-    t.ok(err.code?.includes('SERVER_ALREADY_LISTEN'))
+    t.is(err.code, 'SERVER_ALREADY_LISTENING')
     server.close()
   }
 })
@@ -125,12 +125,12 @@ test('server.listen arguments', (t) => {
     server2.close()
   })
 
-  const server3 = createServer().listen(60000, () => {
+  const server3 = createServer().listen(0, () => {
     args.pass('port and listener')
     server3.close()
   })
 
-  const server4 = createServer().listen(60001, '0.0.0.0', () => {
+  const server4 = createServer().listen(0, '0.0.0.0', () => {
     args.pass('port, host and listener')
     server4.close()
   })
