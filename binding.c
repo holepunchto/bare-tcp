@@ -368,13 +368,13 @@ static js_value_t *
 bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
   int err;
 
-  size_t argc = 3;
-  js_value_t *argv[3];
+  size_t argc = 4;
+  js_value_t *argv[4];
 
   err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
   assert(err == 0);
 
-  assert(argc == 3);
+  assert(argc == 4);
 
   bare_tcp_t *tcp;
   err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
@@ -388,8 +388,17 @@ bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
   err = js_get_value_string_utf8(env, argv[2], ip, 17, NULL);
   assert(err == 0);
 
-  struct sockaddr_in addr;
-  err = uv_ip4_addr((char *) ip, port, &addr);
+  uint32_t family;
+  err = js_get_value_uint32(env, argv[3], &family);
+  assert(err == 0);
+
+  struct sockaddr_storage addr;
+
+  if (family == 4) {
+    err = uv_ip4_addr((char *) ip, port, (struct sockaddr_in *) &addr);
+  } else {
+    err = uv_ip6_addr((char *) ip, port, (struct sockaddr_in6 *) &addr);
+  }
 
   if (err < 0) {
     js_throw_error(env, uv_err_name(err), uv_strerror(err));
@@ -414,13 +423,13 @@ static js_value_t *
 bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
   int err;
 
-  size_t argc = 4;
-  js_value_t *argv[4];
+  size_t argc = 5;
+  js_value_t *argv[5];
 
   err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
   assert(err == 0);
 
-  assert(argc == 4);
+  assert(argc == 5);
 
   bare_tcp_t *tcp;
   err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
@@ -438,10 +447,20 @@ bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
   err = js_get_value_uint32(env, argv[3], &backlog);
   assert(err == 0);
 
-  struct sockaddr_in addr;
-  int addr_len = sizeof(struct sockaddr_in);
+  uint32_t family;
+  err = js_get_value_uint32(env, argv[4], &family);
+  assert(err == 0);
 
-  err = uv_ip4_addr((char *) ip, port, &addr);
+  struct sockaddr_storage addr;
+  int addr_len;
+
+  if (family == 4) {
+    addr_len = sizeof(struct sockaddr_in);
+    err = uv_ip4_addr((char *) ip, port, (struct sockaddr_in *) &addr);
+  } else {
+    addr_len = sizeof(struct sockaddr_in6);
+    err = uv_ip6_addr((char *) ip, port, (struct sockaddr_in6 *) &addr);
+  }
 
   if (err < 0) {
     js_throw_error(env, uv_err_name(err), uv_strerror(err));
@@ -470,7 +489,13 @@ bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
     return NULL;
   }
 
-  int local_port = ntohs(((struct sockaddr_in *) &name)->sin_port);
+  int local_port;
+
+  if (family == 4) {
+    local_port = ntohs(((struct sockaddr_in *) &name)->sin_port);
+  } else {
+    local_port = ntohs(((struct sockaddr_in6 *) &name)->sin6_port);
+  }
 
   js_value_t *res;
   err = js_create_uint32(env, local_port, &res);
