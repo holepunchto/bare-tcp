@@ -160,6 +160,11 @@ test('ipv6 support', async (t) => {
   createConnection({ port, family: 6 }).end('hello ipv6')
 })
 
+test('handle invalid host', (t) => {
+  const server = createServer()
+  t.exception(() => server.listen(0, '0000'), /INVALID_HOST/)
+})
+
 function waitForServer (server) {
   return new Promise((resolve, reject) => {
     server.on('listening', done)

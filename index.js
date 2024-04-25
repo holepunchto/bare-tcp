@@ -4,6 +4,7 @@ const { Duplex } = require('bare-stream')
 const binding = require('./binding')
 const constants = require('./lib/constants')
 const errors = require('./lib/errors')
+const ip = require('./lib/ip')
 
 const defaultReadBufferSize = 65536
 
@@ -51,7 +52,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
-    let family = 4
+    let family = 0
 
     if (typeof host === 'function') {
       onconnect = host
@@ -65,11 +66,17 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
       opts = port || {}
       port = opts.port || 0
       host = opts.host || 'localhost'
-      family = opts.family || 4
+      family = opts.family || 0
     }
 
     if (host === 'localhost') {
-      host = family === 4 ? '127.0.0.1' : '::1'
+      host = family === 6 ? '::1' : '127.0.0.1'
+    }
+
+    if (family === 0) {
+      family = ip.isIP(host)
+
+      if (family === 0) throw errors.INVALID_HOST()
     }
 
     binding.connect(this._handle, port, host, family)
@@ -296,7 +303,9 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
     if (host === 'localhost') host = '127.0.0.1'
 
-    const family = host.includes(':') ? 6 : 4
+    const family = ip.isIP(host)
+
+    if (family === 0) throw errors.INVALID_HOST()
 
     try {
       this._port = binding.bind(this._handle, port, host, backlog, family)
