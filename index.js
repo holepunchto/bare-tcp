@@ -52,8 +52,6 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
-    let family = 0
-
     if (typeof host === 'function') {
       onconnect = host
       host = 'localhost'
@@ -62,6 +60,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
       opts = {}
     }
 
+    let family = 0
+
     if (typeof port === 'object' && port !== null) {
       opts = port || {}
       port = opts.port || 0
@@ -69,9 +69,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
       family = opts.family || 0
     }
 
-    if (host === 'localhost') {
-      host = family === 6 ? '::1' : '127.0.0.1'
-    }
+    if (!host) host = 'localhost'
+    if (host === 'localhost') host = family === 6 ? '::1' : '127.0.0.1'
 
     if (family === 0) {
       family = ip.isIP(host)
@@ -301,7 +300,10 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       backlog = opts.backlog || 511
     }
 
-    if (host === 'localhost') host = '127.0.0.1'
+    if (!host) host = '0.0.0.0'
+    else if (host === 'localhost') host = '127.0.0.1'
+
+    if (!backlog) backlog = 511
 
     const family = ip.isIP(host)
 
