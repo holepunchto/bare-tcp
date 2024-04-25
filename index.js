@@ -4,6 +4,7 @@ const { Duplex } = require('bare-stream')
 const binding = require('./binding')
 const constants = require('./lib/constants')
 const errors = require('./lib/errors')
+const ip = require('./lib/ip')
 
 const defaultReadBufferSize = 65536
 
@@ -51,6 +52,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
+    let family = 0
+
     if (typeof host === 'function') {
       onconnect = host
       host = 'localhost'
@@ -63,14 +66,25 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
       opts = port || {}
       port = opts.port || 0
       host = opts.host || 'localhost'
+      family = opts.family || 0
     }
 
-    if (host === 'localhost') host = '127.0.0.1'
+    if (host === 'localhost') {
+      host = family === 6 ? '::1' : '127.0.0.1'
+    }
 
-    binding.connect(this._handle, port, host)
+    if (family === 0) {
+      family = ip.isIP(host)
+
+      if (family === 0) throw errors.INVALID_HOST()
+    }
+
+    binding.connect(this._handle, port, host, family)
 
     this._remotePort = port
     this._remoteHost = host
+    this._remoteFamily = family
+
     this._state |= constants.state.CONNECTING
 
     if (onconnect) this.once('connect', onconnect)
@@ -224,6 +238,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
     this._port = -1
     this._host = null
+    this._family = 0
     this._connections = new Set()
 
     this._handle = binding.init(empty, this,
@@ -249,7 +264,11 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       return null
     }
 
-    return { address: this._host, family: 4, port: this._port }
+    return {
+      address: this._host,
+      family: `IPv${this._family}`,
+      port: this._port
+    }
   }
 
   listen (port = 0, host = '0.0.0.0', backlog = 511, opts = {}, onlistening) {
@@ -284,9 +303,14 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
     if (host === 'localhost') host = '127.0.0.1'
 
+    const family = ip.isIP(host)
+
+    if (family === 0) throw errors.INVALID_HOST()
+
     try {
-      this._port = binding.bind(this._handle, port, host, backlog)
+      this._port = binding.bind(this._handle, port, host, backlog, family)
       this._host = host
+      this._family = family
       this._state |= constants.state.LISTENING
 
       if (onlistening) this.once('listening', onlistening)

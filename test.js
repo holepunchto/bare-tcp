@@ -136,6 +136,35 @@ test('server.listen arguments', (t) => {
   })
 })
 
+test('ipv6 support', async (t) => {
+  t.plan(2)
+
+  const server = createServer()
+    .on('connection', (socket) => {
+      socket
+        .on('data', (data) => {
+          t.is(data.toString(), 'hello ipv6', 'received message')
+
+          server.close()
+        })
+        .end()
+    })
+    .listen(0, '::')
+
+  await waitForServer(server)
+
+  const { port, family } = server.address()
+
+  t.is(family, 'IPv6', 'server family is \'IPv6\'')
+
+  createConnection({ port, family: 6 }).end('hello ipv6')
+})
+
+test('handle invalid host', (t) => {
+  const server = createServer()
+  t.exception(() => server.listen(0, '0000'), /INVALID_HOST/)
+})
+
 function waitForServer (server) {
   return new Promise((resolve, reject) => {
     server.on('listening', done)
