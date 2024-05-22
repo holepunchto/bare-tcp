@@ -394,6 +394,10 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 exports.constants = constants
 exports.errors = errors
 
+exports.isIP = ip.isIP
+exports.isIPv4 = ip.isIPv4
+exports.isIPv6 = ip.isIPv6
+
 exports.createConnection = function createConnection (port, host, opts, onconnect) {
   if (typeof host === 'function') {
     onconnect = host
