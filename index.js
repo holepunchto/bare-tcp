@@ -168,7 +168,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
   _onconnect (err) {
     if (err) {
-      this.destroy(err)
+      if (this._pendingOpen) this._continueOpen(err)
+      else this.destroy(err)
       return
     }
 
