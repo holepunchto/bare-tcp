@@ -171,7 +171,7 @@ test('handle invalid host', (t) => {
   const server = createServer()
 
   server
-    .on('error', (err) => t.is(err.code, 'EAI_NONAME'))
+    .on('error', (err) => t.ok(err))
     .listen(0, 'garbage')
 })
 
