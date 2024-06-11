@@ -18,6 +18,8 @@ test('server + client', async (t) => {
     .on('listening', () => lc.pass('server listening'))
     .listen()
 
+  await waitForServer(server)
+
   const { port } = server.address()
 
   createConnection(port)
@@ -34,6 +36,7 @@ test('socket state getters', async (t) => {
   t.plan(2)
 
   const server = createServer().listen()
+
   await waitForServer(server)
 
   const socket = new Socket()
@@ -50,6 +53,7 @@ test('port already in use', async (t) => {
   t.plan(1)
 
   const server = createServer().listen()
+
   await waitForServer(server)
 
   const server2 = createServer().listen(server.address().port)
@@ -71,6 +75,7 @@ test('not accept server calling listen method twice', async (t) => {
   t.plan(1)
 
   const server = createServer().listen()
+
   await waitForServer(server)
 
   const { port } = server.address()
@@ -161,8 +166,13 @@ test('ipv6 support', async (t) => {
 })
 
 test('handle invalid host', (t) => {
+  t.plan(1)
+
   const server = createServer()
-  t.exception(() => server.listen(0, '0000'), /INVALID_HOST/)
+
+  server
+    .on('error', (err) => t.is(err.code, 'EAI_NONAME'))
+    .listen(0, 'garbage')
 })
 
 function waitForServer (server) {

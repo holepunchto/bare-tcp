@@ -1,6 +1,7 @@
 /* global Bare */
 const EventEmitter = require('bare-events')
 const { Duplex } = require('bare-stream')
+const dns = require('bare-dns')
 const binding = require('./binding')
 const constants = require('./lib/constants')
 const errors = require('./lib/errors')
@@ -52,6 +53,12 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
+    if (this._state & constants.state.CONNECTED) {
+      throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
+    }
+
+    this._state |= constants.state.CONNECTING
+
     if (typeof host === 'function') {
       onconnect = host
       host = 'localhost'
@@ -70,23 +77,41 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     }
 
     if (!host) host = 'localhost'
-    if (host === 'localhost') host = family === 6 ? '::1' : '127.0.0.1'
 
-    if (family === 0) {
-      family = ip.isIP(host)
+    const type = ip.isIP(host)
 
-      if (family === 0) throw errors.INVALID_HOST()
+    if (type === 0) {
+      const {
+        lookup = dns.lookup,
+        hints
+      } = opts
+
+      lookup(host, { family, hints }, (err, address, family) => {
+        this.emit('lookup', err, address, family, host)
+
+        if (err) return this.destroy(err)
+
+        if (this._handle !== null) {
+          this.connect(port, address, { ...opts, family }, onconnect)
+        }
+      })
+
+      return this
     }
 
-    binding.connect(this._handle, port, host, family)
+    family = type
 
-    this._remotePort = port
-    this._remoteHost = host
-    this._remoteFamily = family
+    try {
+      binding.connect(this._handle, port, host, family)
 
-    this._state |= constants.state.CONNECTING
+      this._remotePort = port
+      this._remoteHost = host
+      this._remoteFamily = family
 
-    if (onconnect) this.once('connect', onconnect)
+      if (onconnect) this.once('connect', onconnect)
+    } catch (err) {
+      queueMicrotask(() => this.destroy(err))
+    }
 
     return this
   }
@@ -254,11 +279,11 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   }
 
   get listening () {
-    return (this._state & constants.state.LISTENING) !== 0
+    return (this._state & constants.state.BOUND) !== 0
   }
 
   address () {
-    if ((this._state & constants.state.LISTENING) === 0) {
+    if ((this._state & constants.state.BOUND) === 0) {
       return null
     }
 
@@ -269,8 +294,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     }
   }
 
-  listen (port = 0, host = '0.0.0.0', backlog = 511, opts = {}, onlistening) {
-    if (this._state & constants.state.LISTENING) {
+  listen (port = 0, host = 'localhost', backlog = 511, opts = {}, onlistening) {
+    if (this._state & constants.state.BOUND) {
       throw errors.SERVER_ALREADY_LISTENING('Server is already listening')
     }
 
@@ -278,12 +303,14 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       throw errors.SERVER_IS_CLOSED('Server is closed')
     }
 
+    this._state |= constants.state.BINDING
+
     if (typeof port === 'function') {
       onlistening = port
       port = 0
     } else if (typeof host === 'function') {
       onlistening = host
-      host = '0.0.0.0'
+      host = 'localhost'
     } else if (typeof backlog === 'function') {
       onlistening = backlog
       backlog = 511
@@ -292,27 +319,48 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       opts = {}
     }
 
+    let family = 0
+
     if (typeof port === 'object' && port !== null) {
       opts = port || {}
       port = opts.port || 0
       host = opts.host || 'localhost'
+      family = opts.family || 0
       backlog = opts.backlog || 511
     }
 
-    if (!host) host = '0.0.0.0'
-    else if (host === 'localhost') host = '127.0.0.1'
-
+    if (!host) host = 'localhost'
     if (!backlog) backlog = 511
 
-    const family = ip.isIP(host)
+    const type = ip.isIP(host)
 
-    if (family === 0) throw errors.INVALID_HOST()
+    if (type === 0) {
+      const {
+        lookup = dns.lookup,
+        hints
+      } = opts
+
+      lookup(host, { family, hints }, (err, address, family) => {
+        this.emit('lookup', err, address, family, host)
+
+        if (err) return this.emit('error', err)
+
+        if (this._handle !== null) {
+          this.listen(port, address, backlog, { ...opts, family }, onlistening)
+        }
+      })
+
+      return this
+    }
+
+    family = type
 
     try {
       this._port = binding.bind(this._handle, port, host, backlog, family)
       this._host = host
       this._family = family
-      this._state |= constants.state.LISTENING
+      this._state |= constants.state.BOUND
+      this._state &= ~constants.state.BINDING
 
       if (onlistening) this.once('listening', onlistening)
 

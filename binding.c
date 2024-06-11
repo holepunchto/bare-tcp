@@ -384,8 +384,8 @@ bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
   err = js_get_value_uint32(env, argv[1], &port);
   assert(err == 0);
 
-  utf8_t ip[17];
-  err = js_get_value_string_utf8(env, argv[2], ip, 17, NULL);
+  utf8_t ip[INET6_ADDRSTRLEN];
+  err = js_get_value_string_utf8(env, argv[2], ip, INET6_ADDRSTRLEN, NULL);
   assert(err == 0);
 
   uint32_t family;
@@ -439,8 +439,8 @@ bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
   err = js_get_value_uint32(env, argv[1], &port);
   assert(err == 0);
 
-  utf8_t ip[17];
-  err = js_get_value_string_utf8(env, argv[2], ip, 17, NULL);
+  utf8_t ip[INET6_ADDRSTRLEN];
+  err = js_get_value_string_utf8(env, argv[2], ip, INET6_ADDRSTRLEN, NULL);
   assert(err == 0);
 
   uint32_t backlog;
