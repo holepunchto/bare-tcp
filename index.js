@@ -89,7 +89,11 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
       lookup(host, { family, hints }, (err, address, family) => {
         this.emit('lookup', err, address, family, host)
 
-        if (err) return this.destroy(err)
+        if (err) {
+          if (this._pendingOpen) this._continueOpen(err)
+          else this.destroy(err)
+          return
+        }
 
         if (this._handle !== null) {
           this.connect(port, address, { ...opts, family }, onconnect)
