@@ -53,7 +53,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
-    if (this._state & constants.state.CONNECTED) {
+    if (this._state & constants.state.CONNECTING || this._state & constants.state.CONNECTED) {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
     }
 
@@ -88,6 +88,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
       lookup(host, { family, hints }, (err, address, family) => {
         this.emit('lookup', err, address, family, host)
+
+        this._state &= ~constants.state.CONNECTING
 
         if (err) {
           if (this._pendingOpen) this._continueOpen(err)
@@ -299,7 +301,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   }
 
   listen (port = 0, host = 'localhost', backlog = 511, opts = {}, onlistening) {
-    if (this._state & constants.state.BOUND) {
+    if (this._state & constants.state.BINDING || this._state & constants.state.BOUND) {
       throw errors.SERVER_ALREADY_LISTENING('Server is already listening')
     }
 
@@ -346,6 +348,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
       lookup(host, { family, hints }, (err, address, family) => {
         this.emit('lookup', err, address, family, host)
+
+        this._state &= ~constants.state.BINDING
 
         if (err) return this.emit('error', err)
 
