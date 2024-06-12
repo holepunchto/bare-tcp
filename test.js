@@ -36,7 +36,6 @@ test('socket state getters', async (t) => {
   t.plan(2)
 
   const server = createServer().listen()
-
   await waitForServer(server)
 
   const socket = new Socket()
@@ -52,17 +51,36 @@ test('socket state getters', async (t) => {
 test('port already in use', async (t) => {
   t.plan(1)
 
-  const server = createServer().listen()
+  const a = createServer().listen()
+  await waitForServer(a)
 
-  await waitForServer(server)
+  const b = createServer().listen(a.address().port)
 
-  const server2 = createServer().listen(server.address().port)
-
-  server2.on('error', (err) => {
+  b.on('error', (err) => {
     t.is(err.code, 'EADDRINUSE', 'catch EADDRINUSE error')
 
-    server.close()
-    server2.close()
+    a.close()
+    b.close()
+  })
+})
+
+test('port already in use, listen again', async (t) => {
+  t.plan(2)
+
+  const a = createServer().listen()
+  await waitForServer(a)
+
+  const b = createServer().listen(a.address().port)
+
+  b.on('error', (err) => {
+    t.is(err.code, 'EADDRINUSE', 'catch EADDRINUSE error')
+
+    b.listen(() => {
+      t.pass()
+
+      a.close()
+      b.close()
+    })
   })
 })
 
@@ -75,7 +93,6 @@ test('not accept server calling listen method twice', async (t) => {
   t.plan(1)
 
   const server = createServer().listen()
-
   await waitForServer(server)
 
   const { port } = server.address()
@@ -100,14 +117,14 @@ test('createConnection arguments', async (t) => {
 
   const { port } = server.address()
 
-  const socket1 = createConnection(port, () => {
+  const a = createConnection(port, () => {
     args.pass('port and listener')
-    socket1.destroy()
+    a.destroy()
   })
 
-  const socket2 = createConnection(port, 'localhost', () => {
+  const b = createConnection(port, 'localhost', () => {
     args.pass('port, host and listener')
-    socket2.destroy()
+    b.destroy()
   })
 
   await args
@@ -177,12 +194,15 @@ test('handle invalid host', (t) => {
 
 function waitForServer (server) {
   return new Promise((resolve, reject) => {
-    server.on('listening', done)
-    server.on('error', done)
+    server
+      .on('listening', done)
+      .on('error', done)
 
     function done (error) {
-      server.removeListener('listening', done)
-      server.removeListener('error', done)
+      server
+        .off('listening', done)
+        .off('error', done)
+
       error ? reject(error) : resolve()
     }
   })

@@ -270,14 +270,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     this._family = 0
     this._connections = new Set()
 
-    this._handle = binding.init(empty, this,
-      this._onconnection,
-      noop,
-      noop,
-      noop,
-      noop,
-      this._onclose
-    )
+    this._error = null
+    this._handle = null
 
     if (onconnection) this.on('connection', onconnection)
 
@@ -347,21 +341,32 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       } = opts
 
       lookup(host, { family, hints }, (err, address, family) => {
+        if (this._state & constants.state.CLOSING) return
+
         this.emit('lookup', err, address, family, host)
 
         this._state &= ~constants.state.BINDING
 
         if (err) return this.emit('error', err)
 
-        if (this._handle !== null) {
-          this.listen(port, address, backlog, { ...opts, family }, onlistening)
-        }
+        this.listen(port, address, backlog, { ...opts, family }, onlistening)
       })
 
       return this
     }
 
     family = type
+
+    this._handle = binding.init(empty, this,
+      this._onconnection,
+      noop,
+      noop,
+      noop,
+      noop,
+      this._onclose
+    )
+
+    if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     try {
       this._port = binding.bind(this._handle, port, host, backlog, family)
@@ -374,9 +379,9 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
       queueMicrotask(() => this.emit('listening'))
     } catch (err) {
-      queueMicrotask(() => {
-        if ((this._state & constants.state.CLOSING) === 0) this.emit('error', err)
-      })
+      this._error = err
+
+      binding.close(this._handle)
     }
 
     return this
@@ -386,20 +391,23 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     if (onclose) this.once('close', onclose)
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
-    this._closeMaybe()
+    queueMicrotask(() => this._closeMaybe())
   }
 
   ref () {
-    binding.ref(this._handle)
+    this._state &= ~constants.state.UNREFED
+    if (this._handle !== null) binding.ref(this._handle)
   }
 
   unref () {
-    binding.unref(this._handle)
+    this._state |= constants.state.UNREFED
+    if (this._handle !== null) binding.unref(this._handle)
   }
 
   _closeMaybe () {
     if ((this._state & constants.state.CLOSING) && this._connections.size === 0) {
-      binding.close(this._handle)
+      if (this._handle !== null) binding.close(this._handle)
+      else this.emit('close')
       TCPServer._servers.delete(this)
     }
   }
@@ -438,8 +446,14 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   }
 
   _onclose () {
+    const err = this._error
+
+    this._state &= ~constants.state.BINDING
+    this._error = null
     this._handle = null
-    this.emit('close')
+
+    if (err) this.emit('error', err)
+    else this.emit('close')
   }
 
   static _servers = new Set()
