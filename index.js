@@ -391,7 +391,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
     if (onclose) this.once('close', onclose)
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
-    queueMicrotask(() => this._closeMaybe())
+    this._closeMaybe()
   }
 
   ref () {
@@ -407,7 +407,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
   _closeMaybe () {
     if ((this._state & constants.state.CLOSING) && this._connections.size === 0) {
       if (this._handle !== null) binding.close(this._handle)
-      else this.emit('close')
+      else queueMicrotask(() => this.emit('close'))
       TCPServer._servers.delete(this)
     }
   }
