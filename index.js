@@ -8,6 +8,7 @@ const errors = require('./lib/errors')
 const ip = require('./lib/ip')
 
 const defaultReadBufferSize = 65536
+const defaultKeepAliveDelay = 60000
 
 const Socket = exports.Socket = class TCPSocket extends Duplex {
   constructor (opts = {}) {
@@ -110,6 +111,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.connect(this._handle, port, host, family)
 
+      if (opts.keepAlive === true) this.setKeepAlive(opts.keepAlive, opts.keepAliveInitialDelay)
+
       this._remotePort = port
       this._remoteHost = host
       this._remoteFamily = family
@@ -118,6 +121,17 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     } catch (err) {
       queueMicrotask(() => this.destroy(err))
     }
+
+    return this
+  }
+
+  setKeepAlive (enable = false, initialDelay = defaultKeepAliveDelay) {
+    enable = Number(enable)
+    initialDelay = Math.floor(initialDelay / 1000)
+
+    if (enable && initialDelay === 0) enable = 0
+
+    binding.keepalive(this._handle, enable, initialDelay)
 
     return this
   }
@@ -264,6 +278,9 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
     this._readBufferSize = readBufferSize
     this._allowHalfOpen = allowHalfOpen
+
+    this._keepAlive = opts.keepAlive
+    this._keepAliveDelay = opts.keepAliveInitialDelay
 
     this._port = -1
     this._host = null
@@ -431,6 +448,8 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       socket._state |= constants.state.CONNECTED
 
       this._connections.add(socket)
+
+      if (this._keepAlive === true) socket.setKeepAlive(this._keepAlive, this._keepAliveDelay)
 
       socket.on('close', () => {
         this._connections.delete(socket)
