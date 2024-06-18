@@ -8,7 +8,6 @@ const errors = require('./lib/errors')
 const ip = require('./lib/ip')
 
 const defaultReadBufferSize = 65536
-const defaultKeepAliveDelay = 60000
 
 const Socket = exports.Socket = class TCPSocket extends Duplex {
   constructor (opts = {}) {
@@ -125,11 +124,11 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     return this
   }
 
-  setKeepAlive (enable = false, initialDelay = defaultKeepAliveDelay) {
+  setKeepAlive (enable = false, initialDelay = 0) {
     enable = Number(enable)
     initialDelay = Math.floor(initialDelay / 1000)
 
-    if (enable && initialDelay === 0) enable = 0
+    if (initialDelay === 0) enable = 0
 
     binding.keepalive(this._handle, enable, initialDelay)
 
