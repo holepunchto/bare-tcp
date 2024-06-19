@@ -707,8 +707,8 @@ bare_tcp_keepalive (js_env_t *env, js_callback_info_t *info) {
   err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
   assert(err == 0);
 
-  int32_t keepalive;
-  err = js_get_value_int32(env, argv[1], &keepalive);
+  bool keepalive;
+  err = js_get_value_bool(env, argv[1], &keepalive);
   assert(err == 0);
 
   uint32_t keepalive_delay;

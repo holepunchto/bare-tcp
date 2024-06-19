@@ -124,13 +124,12 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     return this
   }
 
-  setKeepAlive (enable = false, initialDelay = 0) {
-    enable = Number(enable)
-    initialDelay = Math.floor(initialDelay / 1000)
+  setKeepAlive (enable = false, delay = 0) {
+    delay = Math.floor(delay / 1000)
 
-    if (initialDelay === 0) enable = 0
+    if (delay === 0) enable = false
 
-    binding.keepalive(this._handle, enable, initialDelay)
+    binding.keepalive(this._handle, enable, delay)
 
     return this
   }
