@@ -111,6 +111,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
       binding.connect(this._handle, port, host, family)
 
       if (opts.keepAlive === true) this.setKeepAlive(opts.keepAlive, opts.keepAliveInitialDelay)
+      if (opts.noDelay === true) this.setNoDelay()
 
       this._remotePort = port
       this._remoteHost = host
@@ -138,6 +139,12 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     if (delay === 0) enable = false
 
     binding.keepalive(this._handle, enable, delay)
+
+    return this
+  }
+
+  setNoDelay (enable = true) {
+    binding.nodelay(this._handle, enable)
 
     return this
   }
@@ -287,6 +294,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
 
     this._keepAlive = opts.keepAlive
     this._keepAliveDelay = opts.keepAliveInitialDelay
+    this._noDelay = opts.noDelay
 
     this._port = -1
     this._host = null
@@ -456,6 +464,7 @@ const Server = exports.Server = class TCPServer extends EventEmitter {
       this._connections.add(socket)
 
       if (this._keepAlive === true) socket.setKeepAlive(this._keepAlive, this._keepAliveDelay)
+      if (this._noDelay === true) socket.setNoDelay()
 
       socket.on('close', () => {
         this._connections.delete(socket)
