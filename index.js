@@ -30,6 +30,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._pendingFinal = null
     this._pendingDestroy = null
 
+    this._timeout = null
+
     this._buffer = Buffer.alloc(readBufferSize)
 
     this._handle = binding.init(this._buffer, this,
@@ -149,6 +151,16 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     return this
   }
 
+  setTimeout (ms, ontimeout) {
+    if (ontimeout) this.on('timeout', ontimeout)
+
+    this._timeout = setTimeout(() => this.emit('timeout'), ms)
+
+    this.timeout = ms
+
+    return this
+  }
+
   ref () {
     binding.ref(this._handle)
   }
@@ -237,6 +249,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onread (err, read) {
+    this._timeout?.refresh()
+
     if (err) {
       this.destroy(err)
       return
@@ -258,6 +272,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onwrite (err) {
+    this._timeout?.refresh()
+
     this._continueWrite(err)
   }
 
@@ -266,6 +282,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onclose () {
+    clearTimeout(this._timeout)
+
     this._handle = null
     this._continueDestroy()
   }
@@ -515,7 +533,11 @@ exports.createConnection = function createConnection (port, host, opts, onconnec
     host = opts.host || 'localhost'
   }
 
-  return new Socket(opts).connect(port, host, opts, onconnect)
+  const socket = new Socket(opts).connect(port, host, opts, onconnect)
+
+  if (opts && opts.timeout) socket.setTimeout(opts.timeout)
+
+  return socket
 }
 
 exports.createServer = function createServer (opts, onconnection) {
