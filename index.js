@@ -30,7 +30,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._pendingFinal = null
     this._pendingDestroy = null
 
-    this._timeout = null
+    this._timer = null
 
     this._buffer = Buffer.alloc(readBufferSize)
 
@@ -114,6 +114,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
       if (opts.keepAlive === true) this.setKeepAlive(opts.keepAlive, opts.keepAliveInitialDelay)
       if (opts.noDelay === true) this.setNoDelay()
+      if (opts.timeout) this.setTimeout(opts.timeout)
 
       this._remotePort = port
       this._remoteHost = host
@@ -152,9 +153,9 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   setTimeout (ms, ontimeout) {
-    if (ontimeout) this.on('timeout', ontimeout)
+    if (ontimeout) this.once('timeout', ontimeout)
 
-    this._timeout = setTimeout(() => this.emit('timeout'), ms)
+    this._timer = setTimeout(() => this.emit('timeout'), ms)
 
     this.timeout = ms
 
@@ -249,7 +250,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onread (err, read) {
-    this._timeout?.refresh()
+    if (this._timer) this._timer.refresh()
 
     if (err) {
       this.destroy(err)
@@ -272,7 +273,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onwrite (err) {
-    this._timeout?.refresh()
+    if (this._timer) this._timer.refresh()
 
     this._continueWrite(err)
   }
@@ -282,7 +283,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onclose () {
-    clearTimeout(this._timeout)
+    clearTimeout(this._timer)
 
     this._handle = null
     this._continueDestroy()
@@ -533,11 +534,7 @@ exports.createConnection = function createConnection (port, host, opts, onconnec
     host = opts.host || 'localhost'
   }
 
-  const socket = new Socket(opts).connect(port, host, opts, onconnect)
-
-  if (opts && opts.timeout) socket.setTimeout(opts.timeout)
-
-  return socket
+  return new Socket(opts).connect(port, host, opts, onconnect)
 }
 
 exports.createServer = function createServer (opts, onconnection) {

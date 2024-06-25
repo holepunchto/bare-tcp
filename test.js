@@ -197,45 +197,37 @@ test('timeout', (t) => {
     const sub = t.test()
     sub.plan(3)
 
-    const _sockets = []
-
-    const server = createServer((s) => _sockets.push(s)).listen()
+    const server = createServer((s) => s.end()).listen()
     await waitForServer(server)
 
     const socket = createConnection(server.address().port, () => {
       socket.setTimeout(10, () => sub.pass('timeout callback'))
       socket.on('timeout', () => sub.pass('timeout event'))
       sub.is(socket.timeout, 10)
-
-      _sockets.push(socket)
     })
 
     await sub
 
-    _sockets.forEach((s) => s.destroy())
+    socket.destroy()
     server.close()
   })
 
-  t.test('timeout option at createConnection', async (t) => {
+  t.test('timeout option', async (t) => {
     const sub = t.test()
     sub.plan(1)
 
-    const _sockets = []
-
-    const server = createServer((s) => _sockets.push(s)).listen()
+    const server = createServer((s) => s.end()).listen()
     await waitForServer(server)
 
     const { port } = server.address()
 
     const socket = createConnection({ port, timeout: 10 }, () => {
       socket.on('timeout', () => sub.pass('timeout triggered'))
-
-      _sockets.push(socket)
     })
 
     await sub
 
-    _sockets.forEach((s) => s.destroy())
+    socket.destroy()
     server.close()
   })
 
