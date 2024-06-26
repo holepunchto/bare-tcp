@@ -158,9 +158,14 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   setTimeout (ms, ontimeout) {
-    if (ontimeout) this.once('timeout', ontimeout)
+    if (ms === 0) {
+      clearTimeout(this._timer)
+      this._timer = null
+    } else {
+      if (ontimeout) this.once('timeout', ontimeout)
+      this._timer = setTimeout(() => this.emit('timeout'), ms)
+    }
 
-    this._timer = setTimeout(() => this.emit('timeout'), ms)
     this._timeout = ms
 
     return this

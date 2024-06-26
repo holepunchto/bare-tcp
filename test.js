@@ -196,7 +196,7 @@ test('basic timeout', async (t) => {
   const sub = t.test()
   sub.plan(3)
 
-  const server = createServer((s) => s.end()).listen()
+  const server = createServer((socket) => socket.end()).listen()
   await waitForServer(server)
 
   const socket = createConnection(server.address().port, () => {
@@ -211,6 +211,31 @@ test('basic timeout', async (t) => {
   server.close()
 })
 
+test('disable timeout with setTimeout(0)', async (t) => {
+  const sub = t.test()
+  sub.plan(2)
+
+  const server = createServer((socket) => socket.end()).listen()
+  await waitForServer(server)
+
+  const socket = createConnection(server.address().port, () => {
+    socket.setTimeout(10, () => sub.fail('timeout triggered'))
+
+    socket.setTimeout(0)
+    sub.is(socket.timeout, undefined)
+
+    setTimeout(() => {
+      sub.pass('timeout not triggeded')
+
+      socket.end()
+    }, 20)
+  })
+
+  await sub
+
+  server.close()
+})
+
 test('timeout option', async (t) => {
   const sub = t.test()
   sub.plan(1)
@@ -221,12 +246,15 @@ test('timeout option', async (t) => {
   const { port } = server.address()
 
   const socket = createConnection({ port, timeout: 10 }, () => {
-    socket.on('timeout', () => sub.pass('timeout triggered'))
+    socket.on('timeout', () => {
+      sub.pass('timeout triggered')
+
+      socket.end()
+    })
   })
 
   await sub
 
-  socket.destroy()
   server.close()
 })
 
@@ -247,8 +275,9 @@ test('should not trigger timeout by writing activity', async (t) => {
 
     const interval = setInterval(() => socket.write('message'), 5)
     setTimeout(() => {
-      clearInterval(interval)
       sub.pass('timeout not triggered')
+
+      clearInterval(interval)
       socket.end()
     }, 50)
   })
@@ -266,8 +295,9 @@ test('should not trigger timeout by reading activity', async (t) => {
     const interval = setInterval(() => socket.write('message'), 5)
 
     setTimeout(() => {
-      clearInterval(interval)
       sub.pass('timeout not triggered')
+
+      clearInterval(interval)
       socket.end()
     }, 50)
   }).listen()
