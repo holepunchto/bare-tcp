@@ -192,104 +192,102 @@ test('handle invalid host', (t) => {
     .listen(0, 'garbage')
 })
 
-test('timeout', (t) => {
-  t.test('basic', async (t) => {
-    const sub = t.test()
-    sub.plan(3)
+test('basic timeout', async (t) => {
+  const sub = t.test()
+  sub.plan(3)
 
-    const server = createServer((s) => s.end()).listen()
-    await waitForServer(server)
+  const server = createServer((s) => s.end()).listen()
+  await waitForServer(server)
 
-    const socket = createConnection(server.address().port, () => {
-      socket.setTimeout(10, () => sub.pass('timeout callback'))
-      socket.on('timeout', () => sub.pass('timeout event'))
-      sub.is(socket.timeout, 10)
-    })
-
-    await sub
-
-    socket.destroy()
-    server.close()
+  const socket = createConnection(server.address().port, () => {
+    socket.setTimeout(10, () => sub.pass('timeout callback'))
+    socket.on('timeout', () => sub.pass('timeout event'))
+    sub.is(socket.timeout, 10)
   })
 
-  t.test('timeout option', async (t) => {
-    const sub = t.test()
-    sub.plan(1)
+  await sub
 
-    const server = createServer((s) => s.end()).listen()
-    await waitForServer(server)
+  socket.destroy()
+  server.close()
+})
 
-    const { port } = server.address()
+test('timeout option', async (t) => {
+  const sub = t.test()
+  sub.plan(1)
 
-    const socket = createConnection({ port, timeout: 10 }, () => {
-      socket.on('timeout', () => sub.pass('timeout triggered'))
-    })
+  const server = createServer((s) => s.end()).listen()
+  await waitForServer(server)
 
-    await sub
+  const { port } = server.address()
 
-    socket.destroy()
-    server.close()
+  const socket = createConnection({ port, timeout: 10 }, () => {
+    socket.on('timeout', () => sub.pass('timeout triggered'))
   })
 
-  t.test('should not trigger timeout by writing activity', async (t) => {
-    const sub = t.test()
-    sub.plan(1)
+  await sub
 
-    const _sockets = []
+  socket.destroy()
+  server.close()
+})
 
-    const server = createServer((s) => _sockets.push(s)).listen()
-    await waitForServer(server)
+test('should not trigger timeout by writing activity', async (t) => {
+  const sub = t.test()
+  sub.plan(1)
 
-    const socket = createConnection(server.address().port, () => {
-      socket.setTimeout(20, () => sub.fail('timeout triggered'))
-      socket.on('timeout', () => sub.fail('timeout triggered'))
+  const _sockets = []
 
-      const interval = setInterval(() => socket.write('message'), 5)
-      setTimeout(() => {
-        clearInterval(interval)
-        sub.pass('timeout not triggered')
-      }, 50)
+  const server = createServer((s) => _sockets.push(s)).listen()
+  await waitForServer(server)
 
-      _sockets.push(socket)
-    })
+  const socket = createConnection(server.address().port, () => {
+    socket.setTimeout(20, () => sub.fail('timeout triggered'))
+    socket.on('timeout', () => sub.fail('timeout triggered'))
 
-    await sub
+    const interval = setInterval(() => socket.write('message'), 5)
+    setTimeout(() => {
+      clearInterval(interval)
+      sub.pass('timeout not triggered')
+    }, 50)
 
-    _sockets.forEach((s) => s.destroy())
-    server.close()
+    _sockets.push(socket)
   })
 
-  t.test('should not trigger timeout by reading activity', async (t) => {
-    const sub = t.test()
-    sub.plan(1)
+  await sub
 
-    const _sockets = []
+  _sockets.forEach((s) => s.destroy())
+  server.close()
+})
 
-    const server = createServer((s) => {
-      const interval = setInterval(() => s.write('message'), 5)
+test('should not trigger timeout by reading activity', async (t) => {
+  const sub = t.test()
+  sub.plan(1)
 
-      setTimeout(() => {
-        clearInterval(interval)
-        sub.pass('timeout not triggered')
-      }, 50)
+  const _sockets = []
 
-      _sockets.push(s)
-    }).listen()
+  const server = createServer((s) => {
+    const interval = setInterval(() => s.write('message'), 5)
 
-    await waitForServer(server)
+    setTimeout(() => {
+      clearInterval(interval)
+      sub.pass('timeout not triggered')
+    }, 50)
 
-    const socket = createConnection(server.address().port, () => {
-      socket.setTimeout(20, () => sub.fail('timeout triggered'))
-      socket.on('timeout', () => sub.fail('timeout triggered'))
+    _sockets.push(s)
+  }).listen()
 
-      _sockets.push(socket)
-    })
+  await waitForServer(server)
 
-    await sub
+  const socket = createConnection(server.address().port, () => {
+    socket.setTimeout(20, () => sub.fail('timeout triggered'))
+    socket.on('timeout', () => sub.fail('timeout triggered'))
 
-    _sockets.forEach((s) => s.destroy())
-    server.close()
+    _sockets.push(socket)
   })
+
+  await sub
+
+  _sockets.forEach((s) => s.destroy())
+  server.close()
 })
 
 function waitForServer (server) {
