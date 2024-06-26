@@ -215,7 +215,7 @@ test('timeout option', async (t) => {
   const sub = t.test()
   sub.plan(1)
 
-  const server = createServer((s) => s.end()).listen()
+  const server = createServer((socket) => socket.end()).listen()
   await waitForServer(server)
 
   const { port } = server.address()
@@ -234,27 +234,27 @@ test('should not trigger timeout by writing activity', async (t) => {
   const sub = t.test()
   sub.plan(1)
 
-  const _sockets = []
-
-  const server = createServer((s) => _sockets.push(s)).listen()
+  const server = createServer((socket) => {
+    socket.end()
+    socket.resume()
+  }).listen()
   await waitForServer(server)
 
   const socket = createConnection(server.address().port, () => {
-    socket.setTimeout(20, () => sub.fail('timeout triggered'))
-    socket.on('timeout', () => sub.fail('timeout triggered'))
+    socket
+      .on('timeout', () => sub.fail('timeout triggered'))
+      .setTimeout(20, () => sub.fail('timeout triggered'))
 
     const interval = setInterval(() => socket.write('message'), 5)
     setTimeout(() => {
       clearInterval(interval)
       sub.pass('timeout not triggered')
+      socket.end()
     }, 50)
-
-    _sockets.push(socket)
   })
 
   await sub
 
-  _sockets.forEach((s) => s.destroy())
   server.close()
 })
 
@@ -262,31 +262,29 @@ test('should not trigger timeout by reading activity', async (t) => {
   const sub = t.test()
   sub.plan(1)
 
-  const _sockets = []
-
-  const server = createServer((s) => {
-    const interval = setInterval(() => s.write('message'), 5)
+  const server = createServer((socket) => {
+    const interval = setInterval(() => socket.write('message'), 5)
 
     setTimeout(() => {
       clearInterval(interval)
       sub.pass('timeout not triggered')
+      socket.end()
     }, 50)
-
-    _sockets.push(s)
   }).listen()
 
   await waitForServer(server)
 
   const socket = createConnection(server.address().port, () => {
-    socket.setTimeout(20, () => sub.fail('timeout triggered'))
-    socket.on('timeout', () => sub.fail('timeout triggered'))
+    socket
+      .on('timeout', () => sub.fail('timeout triggered'))
+      .setTimeout(20, () => sub.fail('timeout triggered'))
 
-    _sockets.push(socket)
+    socket.end()
+    socket.resume()
   })
 
   await sub
 
-  _sockets.forEach((s) => s.destroy())
   server.close()
 })
 
