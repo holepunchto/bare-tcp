@@ -31,6 +31,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._pendingDestroy = null
 
     this._timer = null
+    this._timeout = 0
 
     this._buffer = Buffer.alloc(readBufferSize)
 
@@ -52,6 +53,10 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
   get pending () {
     return (this._state & constants.state.CONNECTED) === 0
+  }
+
+  get timeout () {
+    return this._timeout || undefined // For Node.js compatibility
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
@@ -156,8 +161,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     if (ontimeout) this.once('timeout', ontimeout)
 
     this._timer = setTimeout(() => this.emit('timeout'), ms)
-
-    this.timeout = ms
+    this._timeout = ms
 
     return this
   }
