@@ -30,6 +30,9 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
     this._pendingFinal = null
     this._pendingDestroy = null
 
+    this._timer = null
+    this._timeout = 0
+
     this._buffer = Buffer.alloc(readBufferSize)
 
     this._handle = binding.init(this._buffer, this,
@@ -50,6 +53,10 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
   get pending () {
     return (this._state & constants.state.CONNECTED) === 0
+  }
+
+  get timeout () {
+    return this._timeout || undefined // For Node.js compatibility
   }
 
   connect (port, host = 'localhost', opts = {}, onconnect) {
@@ -112,6 +119,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
       if (opts.keepAlive === true) this.setKeepAlive(opts.keepAlive, opts.keepAliveInitialDelay)
       if (opts.noDelay === true) this.setNoDelay()
+      if (opts.timeout) this.setTimeout(opts.timeout)
 
       this._remotePort = port
       this._remoteHost = host
@@ -145,6 +153,20 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
   setNoDelay (enable = true) {
     binding.nodelay(this._handle, enable)
+
+    return this
+  }
+
+  setTimeout (ms, ontimeout) {
+    if (ms === 0) {
+      clearTimeout(this._timer)
+      this._timer = null
+    } else {
+      if (ontimeout) this.once('timeout', ontimeout)
+      this._timer = setTimeout(() => this.emit('timeout'), ms)
+    }
+
+    this._timeout = ms
 
     return this
   }
@@ -237,6 +259,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onread (err, read) {
+    if (this._timer) this._timer.refresh()
+
     if (err) {
       this.destroy(err)
       return
@@ -258,6 +282,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onwrite (err) {
+    if (this._timer) this._timer.refresh()
+
     this._continueWrite(err)
   }
 
@@ -266,6 +292,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onclose () {
+    clearTimeout(this._timer)
+
     this._handle = null
     this._continueDestroy()
   }
