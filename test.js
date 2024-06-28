@@ -200,9 +200,9 @@ test('basic timeout', async (t) => {
   await waitForServer(server)
 
   const socket = createConnection(server.address().port, () => {
-    socket.setTimeout(10, () => sub.pass('timeout callback'))
+    socket.setTimeout(100, () => sub.pass('timeout callback'))
     socket.on('timeout', () => sub.pass('timeout event'))
-    sub.is(socket.timeout, 10)
+    sub.is(socket.timeout, 100)
   })
 
   await sub
@@ -219,7 +219,7 @@ test('disable timeout with setTimeout(0)', async (t) => {
   await waitForServer(server)
 
   const socket = createConnection(server.address().port, () => {
-    socket.setTimeout(10, () => sub.fail('timeout triggered'))
+    socket.setTimeout(100, () => sub.fail('timeout triggered'))
 
     socket.setTimeout(0)
     sub.is(socket.timeout, undefined)
@@ -228,7 +228,7 @@ test('disable timeout with setTimeout(0)', async (t) => {
       sub.pass('timeout not triggeded')
 
       socket.end()
-    }, 20)
+    }, 200)
   })
 
   await sub
@@ -245,7 +245,7 @@ test('timeout option', async (t) => {
 
   const { port } = server.address()
 
-  const socket = createConnection({ port, timeout: 10 }, () => {
+  const socket = createConnection({ port, timeout: 100 }, () => {
     socket.on('timeout', () => {
       sub.pass('timeout triggered')
 
@@ -271,7 +271,7 @@ test('should not trigger timeout by writing activity', async (t) => {
   const socket = createConnection(server.address().port, () => {
     socket
       .on('timeout', () => sub.fail('timeout triggered'))
-      .setTimeout(20, () => sub.fail('timeout triggered'))
+      .setTimeout(200, () => sub.fail('timeout triggered'))
 
     const interval = setInterval(() => socket.write('message'), 5)
     setTimeout(() => {
@@ -279,7 +279,7 @@ test('should not trigger timeout by writing activity', async (t) => {
 
       clearInterval(interval)
       socket.end()
-    }, 50)
+    }, 500)
   })
 
   await sub
@@ -299,7 +299,7 @@ test('should not trigger timeout by reading activity', async (t) => {
 
       clearInterval(interval)
       socket.end()
-    }, 50)
+    }, 500)
   }).listen()
 
   await waitForServer(server)
@@ -307,7 +307,7 @@ test('should not trigger timeout by reading activity', async (t) => {
   const socket = createConnection(server.address().port, () => {
     socket
       .on('timeout', () => sub.fail('timeout triggered'))
-      .setTimeout(20, () => sub.fail('timeout triggered'))
+      .setTimeout(200, () => sub.fail('timeout triggered'))
 
     socket.end()
     socket.resume()
