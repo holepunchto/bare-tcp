@@ -20,8 +20,16 @@
   "scripts": {
     "test": "standard && bare test.js"
   },
-  "author": "Holepunch Inc",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holepunchto/bare-tcp.git"
+  },
+  "author": "Holepunch",
   "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/holepunchto/bare-tcp/issues"
+  },
+  "homepage": "https://github.com/holepunchto/bare-tcp#readme",
   "dependencies": {
     "bare-dns": "^1.0.0",
     "bare-events": "^2.2.2",
