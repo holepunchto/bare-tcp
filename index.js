@@ -177,6 +177,8 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
   unref () {
     binding.unref(this._handle)
+
+    if (this._timer) this._timer.unref()
   }
 
   _open (cb) {
