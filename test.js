@@ -1,5 +1,5 @@
 const test = require('brittle')
-const { createServer, createConnection, Socket } = require('.')
+const { createServer, createConnection, connect, Socket } = require('.')
 
 test('server + client', async (t) => {
   t.plan(2)
@@ -105,9 +105,12 @@ test('not accept server calling listen method twice', async (t) => {
   }
 })
 
-test('createConnection arguments', async (t) => {
-  const args = t.test('args')
-  args.plan(2)
+test('createConnection and connect arguments', async (t) => {
+  const createConnectionArgs = t.test('createConnection')
+  createConnectionArgs.plan(3)
+
+  const connectArgs = t.test('connect')
+  connectArgs.plan(3)
 
   const server = createServer()
     .on('connection', (s) => s.end())
@@ -116,18 +119,41 @@ test('createConnection arguments', async (t) => {
   await waitForServer(server)
 
   const { port } = server.address()
+  const host = 'localhost'
 
+  // createConnection
   const a = createConnection(port, () => {
-    args.pass('port and listener')
+    createConnectionArgs.pass('port and listener')
     a.destroy()
   })
 
-  const b = createConnection(port, 'localhost', () => {
-    args.pass('port, host and listener')
+  const b = createConnection(port, host, () => {
+    createConnectionArgs.pass('port, host and listener')
     b.destroy()
   })
 
-  await args
+  const c = createConnection({ port, host }, () => {
+    createConnectionArgs.pass('options and listener')
+    c.destroy()
+  })
+
+  // connect
+  const d = connect(port, () => {
+    connectArgs.pass('port and listener')
+    d.destroy()
+  })
+
+  const e = connect(port, host, () => {
+    connectArgs.pass('port, host and listener')
+    e.destroy()
+  })
+
+  const f = connect({ port, host }, () => {
+    connectArgs.pass('options and listener')
+    f.destroy()
+  })
+
+  await Promise.all([createConnectionArgs, connectArgs])
 
   server.close()
 })

@@ -530,7 +530,7 @@ exports.isIP = ip.isIP
 exports.isIPv4 = ip.isIPv4
 exports.isIPv6 = ip.isIPv6
 
-exports.createConnection = function createConnection (port, host, opts, onconnect) {
+const createConnection = exports.createConnection = function createConnection (port, host, opts, onconnect) {
   if (typeof host === 'function') {
     onconnect = host
     host = 'localhost'
@@ -547,6 +547,8 @@ exports.createConnection = function createConnection (port, host, opts, onconnec
 
   return new Socket(opts).connect(port, host, opts, onconnect)
 }
+
+exports.connect = createConnection
 
 exports.createServer = function createServer (opts, onconnection) {
   return new Server(opts, onconnection)
