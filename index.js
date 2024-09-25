@@ -24,6 +24,7 @@ const Socket = exports.Socket = class TCPSocket extends Duplex {
 
     this._remotePort = -1
     this._remoteHost = null
+    this._remoteFamily = 0
 
     this._pendingOpen = null
     this._pendingWrite = null
