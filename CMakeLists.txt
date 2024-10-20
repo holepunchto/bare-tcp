@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 
+find_package(cmake-bare REQUIRED PATHS node_modules/cmake-bare)
+
 project(bare_tcp C)
 
-include(bare)
+bare_target(target)
 
 add_bare_module(bare_tcp)
 
@@ -12,7 +14,7 @@ target_sources(
     binding.c
 )
 
-if(WIN32)
+if(target MATCHES "win32")
   target_link_libraries(
     ${bare_tcp}
     PUBLIC
