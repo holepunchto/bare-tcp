@@ -29,7 +29,7 @@ typedef struct {
 } bare_tcp_t;
 
 static void
-bare_tcp__on_connection (uv_stream_t *server, int status) {
+bare_tcp__on_connection(uv_stream_t *server, int status) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) server;
@@ -73,7 +73,7 @@ bare_tcp__on_connection (uv_stream_t *server, int status) {
 }
 
 static void
-bare_tcp__on_connect (uv_connect_t *req, int status) {
+bare_tcp__on_connect(uv_connect_t *req, int status) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
@@ -117,7 +117,7 @@ bare_tcp__on_connect (uv_connect_t *req, int status) {
 }
 
 static void
-bare_tcp__on_read (uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+bare_tcp__on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   if (nread == UV_EOF) nread = 0;
   else if (nread == 0) return;
 
@@ -170,7 +170,7 @@ bare_tcp__on_read (uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
 }
 
 static void
-bare_tcp__on_write (uv_write_t *req, int status) {
+bare_tcp__on_write(uv_write_t *req, int status) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
@@ -214,7 +214,7 @@ bare_tcp__on_write (uv_write_t *req, int status) {
 }
 
 static void
-bare_tcp__on_shutdown (uv_shutdown_t *req, int status) {
+bare_tcp__on_shutdown(uv_shutdown_t *req, int status) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
@@ -258,7 +258,7 @@ bare_tcp__on_shutdown (uv_shutdown_t *req, int status) {
 }
 
 static void
-bare_tcp__on_close (uv_handle_t *handle) {
+bare_tcp__on_close(uv_handle_t *handle) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) handle;
@@ -311,7 +311,7 @@ finalize:
 }
 
 static void
-bare_tcp__on_teardown (js_deferred_teardown_t *handle, void *data) {
+bare_tcp__on_teardown(js_deferred_teardown_t *handle, void *data) {
   bare_tcp_t *tcp = (bare_tcp_t *) data;
 
   tcp->exiting = true;
@@ -320,14 +320,14 @@ bare_tcp__on_teardown (js_deferred_teardown_t *handle, void *data) {
 }
 
 static void
-bare_tcp__on_alloc (uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+bare_tcp__on_alloc(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   bare_tcp_t *tcp = (bare_tcp_t *) handle;
 
   *buf = tcp->read;
 }
 
 static js_value_t *
-bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_init(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 8;
@@ -388,7 +388,7 @@ bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_connect(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 4;
@@ -443,7 +443,7 @@ bare_tcp_connect (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 5;
@@ -528,7 +528,7 @@ bare_tcp_bind (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_accept (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_accept(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 2;
@@ -558,7 +558,7 @@ bare_tcp_accept (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_resume (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_resume(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 1;
@@ -586,7 +586,7 @@ bare_tcp_resume (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_pause (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_pause(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 1;
@@ -614,7 +614,7 @@ bare_tcp_pause (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_writev (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 2;
@@ -664,7 +664,7 @@ bare_tcp_writev (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_end (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_end(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 1;
@@ -694,7 +694,7 @@ bare_tcp_end (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_close (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_close(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 1;
@@ -715,7 +715,7 @@ bare_tcp_close (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_keepalive (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_keepalive(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 3;
@@ -745,7 +745,7 @@ bare_tcp_keepalive (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_nodelay (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_nodelay(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 2;
@@ -771,7 +771,7 @@ bare_tcp_nodelay (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_ref (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_ref(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 1;
@@ -792,7 +792,7 @@ bare_tcp_ref (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_unref (js_env_t *env, js_callback_info_t *info) {
+bare_tcp_unref(js_env_t *env, js_callback_info_t *info) {
   int err;
 
   size_t argc = 1;
@@ -813,7 +813,7 @@ bare_tcp_unref (js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_exports (js_env_t *env, js_value_t *exports) {
+bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   int err;
 
 #define V(name, fn) \
