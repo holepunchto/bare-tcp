@@ -38,6 +38,7 @@
   "devDependencies": {
     "brittle": "^3.5.0",
     "cmake-bare": "^1.1.6",
-    "standard": "^17.1.0"
+    "prettier": "^3.4.1",
+    "prettier-config-standard": "^7.0.0"
   }
 }

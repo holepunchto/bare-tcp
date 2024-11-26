@@ -8,7 +8,7 @@ npm i bare-tcp
 
 ## Usage
 
-``` js
+```js
 const tcp = require('bare-tcp')
 
 const server = tcp.createServer()

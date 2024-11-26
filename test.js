@@ -12,7 +12,9 @@ test('server + client', async (t) => {
     .on('connection', (socket) => {
       socket
         .on('close', () => lc.pass('server connection closed'))
-        .on('data', (data) => lc.alike(data.toString(), 'hello world', 'server received message'))
+        .on('data', (data) =>
+          lc.alike(data.toString(), 'hello world', 'server received message')
+        )
         .end()
     })
     .on('listening', () => lc.pass('server listening'))
@@ -203,7 +205,7 @@ test('ipv6 support', async (t) => {
 
   const { port, family } = server.address()
 
-  t.is(family, 'IPv6', 'server family is \'IPv6\'')
+  t.is(family, 'IPv6', "server family is 'IPv6'")
 
   createConnection({ port, family: 6 }).end('hello ipv6')
 })
@@ -213,9 +215,7 @@ test('handle invalid host', (t) => {
 
   const server = createServer()
 
-  server
-    .on('error', (err) => t.ok(err))
-    .listen(0, 'garbage')
+  server.on('error', (err) => t.ok(err)).listen(0, 'garbage')
 })
 
 test('basic timeout', async (t) => {
@@ -344,16 +344,12 @@ test('should not trigger timeout by reading activity', async (t) => {
   server.close()
 })
 
-function waitForServer (server) {
+function waitForServer(server) {
   return new Promise((resolve, reject) => {
-    server
-      .on('listening', done)
-      .on('error', done)
+    server.on('listening', done).on('error', done)
 
-    function done (error) {
-      server
-        .off('listening', done)
-        .off('error', done)
+    function done(error) {
+      server.off('listening', done).off('error', done)
 
       error ? reject(error) : resolve()
     }
