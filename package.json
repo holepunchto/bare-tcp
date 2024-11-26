@@ -1,6 +1,6 @@
 {
   "name": "bare-tcp",
-  "version": "1.9.1",
+  "version": "2.0.0-0",
   "description": "Native TCP sockets for JavaScript",
   "exports": {
     ".": "./index.js",
@@ -30,6 +30,9 @@
     "url": "https://github.com/holepunchto/bare-tcp/issues"
   },
   "homepage": "https://github.com/holepunchto/bare-tcp#readme",
+  "engines": {
+    "bare": ">=1.7.0"
+  },
   "dependencies": {
     "bare-dns": "^1.0.0",
     "bare-events": "^2.2.2",

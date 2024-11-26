@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <bare.h>
+#include <js.h>
 #include <stdlib.h>
 #include <uv.h>
 
@@ -22,6 +23,9 @@ typedef struct {
   js_ref_t *on_write;
   js_ref_t *on_end;
   js_ref_t *on_close;
+
+  js_deferred_teardown_t *teardown;
+  bool exiting;
 } bare_tcp_t;
 
 static void
@@ -261,6 +265,8 @@ bare_tcp__on_close (uv_handle_t *handle) {
 
   js_env_t *env = tcp->env;
 
+  if (tcp->exiting) goto finalize;
+
   js_handle_scope_t *scope;
   err = js_open_handle_scope(env, &scope);
   assert(err == 0);
@@ -274,6 +280,13 @@ bare_tcp__on_close (uv_handle_t *handle) {
   assert(err == 0);
 
   js_call_function(env, ctx, on_close, 0, NULL, NULL);
+
+  err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+
+finalize:
+  err = js_finish_deferred_teardown_callback(tcp->teardown);
+  assert(err == 0);
 
   err = js_delete_reference(env, tcp->on_connection);
   assert(err == 0);
@@ -295,9 +308,15 @@ bare_tcp__on_close (uv_handle_t *handle) {
 
   err = js_delete_reference(env, tcp->ctx);
   assert(err == 0);
+}
 
-  err = js_close_handle_scope(env, scope);
-  assert(err == 0);
+static void
+bare_tcp__on_teardown (js_deferred_teardown_t *handle, void *data) {
+  bare_tcp_t *tcp = (bare_tcp_t *) data;
+
+  tcp->exiting = true;
+
+  uv_close((uv_handle_t *) &tcp->handle, bare_tcp__on_close);
 }
 
 static void
@@ -336,6 +355,7 @@ bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   }
 
   tcp->env = env;
+  tcp->exiting = false;
 
   err = js_get_typedarray_info(env, argv[0], NULL, (void **) &tcp->read.base, (size_t *) &tcp->read.len, NULL, NULL);
   assert(err == 0);
@@ -359,6 +379,9 @@ bare_tcp_init (js_env_t *env, js_callback_info_t *info) {
   assert(err == 0);
 
   err = js_create_reference(env, argv[7], 1, &tcp->on_close);
+  assert(err == 0);
+
+  err = js_add_deferred_teardown_callback(env, bare_tcp__on_teardown, (void *) tcp, &tcp->teardown);
   assert(err == 0);
 
   return handle;

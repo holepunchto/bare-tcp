@@ -9,7 +9,7 @@ const ip = require('./lib/ip')
 
 const defaultReadBufferSize = 65536
 
-const Socket = (exports.Socket = class TCPSocket extends Duplex {
+exports.Socket = class TCPSocket extends Duplex {
   constructor(opts = {}) {
     super({ eagerOpen: true })
 
@@ -44,8 +44,6 @@ const Socket = (exports.Socket = class TCPSocket extends Duplex {
       this._onfinal,
       this._onclose
     )
-
-    TCPSocket._sockets.add(this)
   }
 
   get connecting() {
@@ -212,7 +210,6 @@ const Socket = (exports.Socket = class TCPSocket extends Duplex {
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
     binding.close(this._handle)
-    TCPSocket._sockets.delete(this)
   }
 
   _destroy(err, cb) {
@@ -220,7 +217,6 @@ const Socket = (exports.Socket = class TCPSocket extends Duplex {
     this._state |= constants.state.CLOSING
     this._pendingDestroy = cb
     binding.close(this._handle)
-    TCPSocket._sockets.delete(this)
   }
 
   _continueOpen(err) {
@@ -304,11 +300,9 @@ const Socket = (exports.Socket = class TCPSocket extends Duplex {
     this._handle = null
     this._continueDestroy()
   }
+}
 
-  static _sockets = new Set()
-})
-
-const Server = (exports.Server = class TCPServer extends EventEmitter {
+exports.Server = class TCPServer extends EventEmitter {
   constructor(opts = {}, onconnection) {
     if (typeof opts === 'function') {
       onconnection = opts
@@ -338,8 +332,6 @@ const Server = (exports.Server = class TCPServer extends EventEmitter {
     this._handle = null
 
     if (onconnection) this.on('connection', onconnection)
-
-    TCPServer._servers.add(this)
   }
 
   get listening() {
@@ -474,7 +466,6 @@ const Server = (exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.CLOSING && this._connections.size === 0) {
       if (this._handle !== null) binding.close(this._handle)
       else queueMicrotask(() => this.emit('close'))
-      TCPServer._servers.delete(this)
     }
   }
 
@@ -486,7 +477,7 @@ const Server = (exports.Server = class TCPServer extends EventEmitter {
 
     if (this._state & constants.state.CLOSING) return
 
-    const socket = new Socket({
+    const socket = new exports.Socket({
       readBufferSize: this._readBufferSize,
       allowHalfOpen: this._allowHalfOpen
     })
@@ -525,9 +516,7 @@ const Server = (exports.Server = class TCPServer extends EventEmitter {
     if (err) this.emit('error', err)
     else this.emit('close')
   }
-
-  static _servers = new Set()
-})
+}
 
 exports.constants = constants
 exports.errors = errors
@@ -556,25 +545,15 @@ exports.createConnection = function createConnection(
     host = opts.host || 'localhost'
   }
 
-  return new Socket(opts).connect(port, host, opts, onconnect)
+  return new exports.Socket(opts).connect(port, host, opts, onconnect)
 }
 
 // For Node.js compatibility
 exports.connect = exports.createConnection
 
 exports.createServer = function createServer(opts, onconnection) {
-  return new Server(opts, onconnection)
+  return new exports.Server(opts, onconnection)
 }
-
-Bare.on('exit', () => {
-  for (const socket of Socket._sockets) {
-    socket.destroy()
-  }
-
-  for (const server of Server._servers) {
-    server.close()
-  }
-})
 
 const empty = Buffer.alloc(0)
 
