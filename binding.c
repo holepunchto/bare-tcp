@@ -277,8 +277,7 @@ bare_tcp__on_close(uv_handle_t *handle) {
   err = js_get_reference_value(env, tcp->on_close, &on_close);
   assert(err == 0);
 
-  err = js_finish_deferred_teardown_callback(tcp->teardown);
-  assert(err == 0);
+  js_deferred_teardown_t *teardown = tcp->teardown;
 
   err = js_delete_reference(env, tcp->on_connection);
   assert(err == 0);
@@ -304,6 +303,9 @@ bare_tcp__on_close(uv_handle_t *handle) {
   if (!tcp->exiting) js_call_function(env, ctx, on_close, 0, NULL, NULL);
 
   err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+
+  err = js_finish_deferred_teardown_callback(teardown);
   assert(err == 0);
 }
 
