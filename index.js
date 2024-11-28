@@ -93,6 +93,8 @@ exports.Socket = class TCPSocket extends Duplex {
       const { lookup = dns.lookup, hints } = opts
 
       lookup(host, { family, hints }, (err, address, family) => {
+        if (this._state & constants.state.CLOSING) return
+
         this.emit('lookup', err, address, family, host)
 
         this._state &= ~constants.state.CONNECTING
@@ -103,9 +105,7 @@ exports.Socket = class TCPSocket extends Duplex {
           return
         }
 
-        if (this._handle !== null) {
-          this.connect(port, address, { ...opts, family }, onconnect)
-        }
+        this.connect(port, address, { ...opts, family }, onconnect)
       })
 
       return this
@@ -116,10 +116,17 @@ exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.connect(this._handle, port, host, family)
 
-      if (opts.keepAlive === true)
+      if (opts.keepAlive === true) {
         this.setKeepAlive(opts.keepAlive, opts.keepAliveInitialDelay)
-      if (opts.noDelay === true) this.setNoDelay()
-      if (opts.timeout) this.setTimeout(opts.timeout)
+      }
+
+      if (opts.noDelay === true) {
+        this.setNoDelay()
+      }
+
+      if (opts.timeout) {
+        this.setTimeout(opts.timeout)
+      }
 
       this._remotePort = port
       this._remoteHost = host

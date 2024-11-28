@@ -265,8 +265,6 @@ bare_tcp__on_close(uv_handle_t *handle) {
 
   js_env_t *env = tcp->env;
 
-  if (tcp->exiting) goto finalize;
-
   js_handle_scope_t *scope;
   err = js_open_handle_scope(env, &scope);
   assert(err == 0);
@@ -279,12 +277,6 @@ bare_tcp__on_close(uv_handle_t *handle) {
   err = js_get_reference_value(env, tcp->on_close, &on_close);
   assert(err == 0);
 
-  js_call_function(env, ctx, on_close, 0, NULL, NULL);
-
-  err = js_close_handle_scope(env, scope);
-  assert(err == 0);
-
-finalize:
   err = js_finish_deferred_teardown_callback(tcp->teardown);
   assert(err == 0);
 
@@ -307,6 +299,11 @@ finalize:
   assert(err == 0);
 
   err = js_delete_reference(env, tcp->ctx);
+  assert(err == 0);
+
+  if (!tcp->exiting) js_call_function(env, ctx, on_close, 0, NULL, NULL);
+
+  err = js_close_handle_scope(env, scope);
   assert(err == 0);
 }
 
