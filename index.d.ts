@@ -25,6 +25,7 @@ interface TCPSocketOptions<S extends TCPSocket = TCPSocket>
 interface TCPSocketConnectOptions {
   dns?: { lookup: typeof Lookup }
   family?: IPFamily
+  hints?: number
   host?: string
   keepAlive?: boolean
   keepAliveInitialDelay?: boolean
@@ -84,6 +85,7 @@ interface TCPServerListenOptions {
   backlog?: number
   dns?: { lookup: typeof Lookup }
   family?: IPFamily
+  hints?: number
   host?: string
   port?: number
 }
@@ -197,5 +199,11 @@ export {
   isIPv4,
   isIPv6,
   TCPSocketAddress,
-  IPFamily
+  IPFamily,
+  TCPSocketEvents,
+  TCPSocketOptions,
+  TCPSocketConnectOptions,
+  TCPServerEvents,
+  TCPServerOptions,
+  TCPServerListenOptions
 }
