@@ -2,6 +2,14 @@ import EventEmitter, { EventMap } from 'bare-events'
 import { Duplex, DuplexOptions, DuplexEvents } from 'bare-stream'
 import { lookup as Lookup } from 'bare-dns'
 
+interface TCPSocketAddress {
+  address: string
+  family: 'IPv4' | 'IPv6'
+  port: number
+}
+
+type IPFamily = 0 | 4 | 6
+
 interface TCPSocketEvents extends DuplexEvents {
   connect: []
   lookup: [err: TCPError, address: string, family: number, host: string]
@@ -16,7 +24,7 @@ interface TCPSocketOptions<S extends TCPSocket = TCPSocket>
 
 interface TCPSocketConnectOptions {
   dns?: { lookup: typeof Lookup }
-  family?: 0 | 4 | 6
+  family?: IPFamily
   host?: string
   keepAlive?: boolean
   keepAliveInitialDelay?: boolean
@@ -75,7 +83,7 @@ interface TCPServerOptions {
 interface TCPServerListenOptions {
   backlog?: number
   dns?: { lookup: typeof Lookup }
-  family?: 0 | 4 | 6
+  family?: IPFamily
   host?: string
   port?: number
 }
@@ -88,7 +96,7 @@ declare class TCPServer<
 
   readonly listening: boolean
 
-  address(): { address: string; family: string; port: number }
+  address(): TCPSocketAddress
 
   listen(
     port?: number,
@@ -170,7 +178,7 @@ declare class TCPError extends Error {
   readonly code: string
 }
 
-declare function isIP(host: string): 0 | 4 | 6
+declare function isIP(host: string): IPFamily
 
 declare function isIPv4(host: string): boolean
 
@@ -187,5 +195,7 @@ export {
   TCPError as errors,
   isIP,
   isIPv4,
-  isIPv6
+  isIPv6,
+  TCPSocketAddress,
+  IPFamily
 }
