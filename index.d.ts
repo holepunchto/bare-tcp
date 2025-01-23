@@ -1,18 +1,33 @@
 import EventEmitter, { EventMap } from 'bare-events'
 import { Duplex, DuplexOptions, DuplexEvents } from 'bare-stream'
-import { lookup as Lookup } from 'bare-dns'
+import { IPFamily, LookupOptions } from 'bare-dns'
+
+interface DNSLookup {
+  (
+    hostname: string,
+    opts: LookupOptions,
+    cb: (
+      err: Error | null,
+      address: string | null,
+      family: IPFamily | 0
+    ) => void
+  ): void
+}
 
 interface TCPSocketAddress {
   address: string
-  family: 'IPv4' | 'IPv6'
+  family: `IPv${IPFamily}`
   port: number
 }
 
-type IPFamily = 0 | 4 | 6
-
 interface TCPSocketEvents extends DuplexEvents {
   connect: []
-  lookup: [err: TCPError, address: string, family: number, host: string]
+  lookup: [
+    err: Error | null,
+    address: string | null,
+    family: IPFamily | 0,
+    host: string
+  ]
   timeout: [ms: number]
 }
 
@@ -22,10 +37,8 @@ interface TCPSocketOptions<S extends TCPSocket = TCPSocket>
   allowHalfOpen?: boolean
 }
 
-interface TCPSocketConnectOptions {
-  dns?: { lookup: typeof Lookup }
-  family?: IPFamily
-  hints?: number
+interface TCPSocketConnectOptions extends LookupOptions {
+  lookup?: DNSLookup
   host?: string
   keepAlive?: boolean
   keepAliveInitialDelay?: boolean
@@ -68,9 +81,14 @@ declare class TCPSocket<
 interface TCPServerEvents extends EventMap {
   close: []
   connection: [socket: TCPSocket]
-  error: [err: TCPError]
+  error: [err: Error]
   listening: []
-  lookup: [err: TCPError, address: string, family: number, host: string]
+  lookup: [
+    err: Error | null,
+    address: string | null,
+    family: IPFamily | 0,
+    host: string
+  ]
 }
 
 interface TCPServerOptions {
@@ -81,11 +99,9 @@ interface TCPServerOptions {
   readBufferSize?: number
 }
 
-interface TCPServerListenOptions {
+interface TCPServerListenOptions extends LookupOptions {
+  lookup?: DNSLookup
   backlog?: number
-  dns?: { lookup: typeof Lookup }
-  family?: IPFamily
-  hints?: number
   host?: string
   port?: number
 }
@@ -172,38 +188,40 @@ declare const constants: {
 }
 
 declare class TCPError extends Error {
+  readonly code: string
+
   static SOCKET_ALREADY_CONNECTED(msg: string): TCPError
   static SERVER_ALREADY_LISTENING(msg: string): TCPError
   static SERVER_IS_CLOSED(msg: string): TCPError
   static INVALID_HOST(msg?: string): TCPError
-
-  readonly code: string
 }
 
-declare function isIP(host: string): IPFamily
+declare function isIP(host: string): IPFamily | 0
 
 declare function isIPv4(host: string): boolean
 
 declare function isIPv6(host: string): boolean
 
 export {
+  type TCPSocket,
   TCPSocket as Socket,
+  type TCPServer,
   TCPServer as Server,
   createConnection,
   createConnection as connect,
   createServer,
   constants,
-  TCPError,
+  type TCPError,
   TCPError as errors,
+  type IPFamily,
   isIP,
   isIPv4,
   isIPv6,
-  TCPSocketAddress,
-  IPFamily,
-  TCPSocketEvents,
-  TCPSocketOptions,
-  TCPSocketConnectOptions,
-  TCPServerEvents,
-  TCPServerOptions,
-  TCPServerListenOptions
+  type TCPSocketAddress,
+  type TCPSocketEvents,
+  type TCPSocketOptions,
+  type TCPSocketConnectOptions,
+  type TCPServerEvents,
+  type TCPServerOptions,
+  type TCPServerListenOptions
 }
