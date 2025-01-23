@@ -496,9 +496,13 @@ exports.Server = class TCPServer extends EventEmitter {
 
       this._connections.add(socket)
 
-      if (this._keepAlive === true)
+      if (this._keepAlive === true) {
         socket.setKeepAlive(this._keepAlive, this._keepAliveDelay)
-      if (this._noDelay === true) socket.setNoDelay()
+      }
+
+      if (this._noDelay === true) {
+        socket.setNoDelay()
+      }
 
       socket.on('close', () => {
         this._connections.delete(socket)
