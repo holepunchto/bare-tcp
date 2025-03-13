@@ -652,15 +652,22 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
 
   uv_buf_t *bufs = malloc(sizeof(uv_buf_t) * bufs_len);
 
+  js_value_t **elements = malloc(sizeof(js_value_t *) * bufs_len);
+
+  uint32_t fetched;
+  err = js_get_array_elements(env, arr, elements, bufs_len, 0, &fetched);
+  assert(err == 0);
+  assert(fetched == bufs_len);
+
   for (uint32_t i = 0; i < bufs_len; i++) {
-    js_value_t *item;
-    err = js_get_element(env, arr, i, &item);
-    assert(err == 0);
+    js_value_t *item = elements[i];
 
     uv_buf_t *buf = &bufs[i];
     err = js_get_typedarray_info(env, item, NULL, (void **) &buf->base, (size_t *) &buf->len, NULL, NULL);
     assert(err == 0);
   }
+
+  free(elements);
 
   uv_write_t *req = &tcp->requests.write;
 
