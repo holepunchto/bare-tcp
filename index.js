@@ -34,11 +34,16 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._buffer = Buffer.alloc(readBufferSize)
 
+    this._multipleConnect = false
+    this._multipleConnectRemainingAttempts = []
+    this._multipleConnectErrors = []
+
     this._handle = binding.init(
       this._buffer,
       this,
       noop,
       this._onconnect,
+      this._onreset,
       this._onread,
       this._onwrite,
       this._onfinal,
@@ -92,10 +97,12 @@ exports.Socket = class TCPSocket extends Duplex {
     if (type === 0) {
       const { lookup = dns.lookup, hints } = opts
 
-      lookup(host, { family, hints }, (err, address, family) => {
+      lookup(host, { all: true, family, hints }, (err, addresses) => {
         if (this._state & constants.state.CLOSING) return
 
-        this.emit('lookup', err, address, family, host)
+        for (const { address, family } of addresses) {
+          this.emit('lookup', err, address, family, host)
+        }
 
         this._state &= ~constants.state.CONNECTING
 
@@ -105,7 +112,24 @@ exports.Socket = class TCPSocket extends Duplex {
           return
         }
 
-        this.connect(port, address, { ...opts, family }, onconnect)
+        const [firstAttempt, ...nextAttempts] = addresses
+
+        this._multipleConnect = nextAttempts.length > 0
+        this._multipleConnectRemainingAttempts = nextAttempts.map((address) => {
+          return [
+            port,
+            address.address,
+            { ...opts, family: address.family },
+            onconnect
+          ]
+        })
+
+        this.connect(
+          port,
+          firstAttempt.address,
+          { ...opts, family: firstAttempt.family },
+          onconnect
+        )
       })
 
       return this
@@ -254,8 +278,23 @@ exports.Socket = class TCPSocket extends Duplex {
     cb(null)
   }
 
+  _reset() {
+    this._state = 0
+    binding.reset(this._handle)
+  }
+
   _onconnect(err) {
     if (err) {
+      if (this._multipleConnect) {
+        this._multipleConnectErrors.push(err)
+
+        if (this._multipleConnectRemainingAttempts.length > 0) {
+          return this._reset()
+        }
+
+        err = new AggregateError(this._multipleConnectErrors)
+      }
+
       if (this._pendingOpen) this._continueOpen(err)
       else this.destroy(err)
       return
@@ -266,6 +305,10 @@ exports.Socket = class TCPSocket extends Duplex {
     this._continueOpen()
 
     this.emit('connect')
+  }
+
+  _onreset() {
+    this.connect(...this._multipleConnectRemainingAttempts.shift())
   }
 
   _onread(err, read) {
@@ -424,6 +467,7 @@ exports.Server = class TCPServer extends EventEmitter {
       empty,
       this,
       this._onconnection,
+      noop,
       noop,
       noop,
       noop,

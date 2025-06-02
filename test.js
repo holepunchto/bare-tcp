@@ -34,6 +34,39 @@ test('server + client', async (t) => {
   server.close()
 })
 
+test('connect IPv4 loopback', async (t) => {
+  t.plan(2)
+
+  const lc = t.test('lifecycle')
+  lc.plan(5)
+
+  const server = createServer()
+    .on('close', () => t.pass('server closed'))
+    .on('connection', (socket) => {
+      socket
+        .on('close', () => lc.pass('server connection closed'))
+        .on('data', (data) =>
+          lc.alike(data.toString(), 'hello world', 'server received message')
+        )
+        .end()
+    })
+    .on('listening', () => lc.pass('server listening'))
+    .listen(0, '127.0.0.1')
+
+  await waitForServer(server)
+
+  const { port } = server.address()
+
+  createConnection(port)
+    .on('connect', () => lc.pass('client connection opened'))
+    .on('close', () => lc.pass('client connection closed'))
+    .end('hello world')
+
+  await lc
+
+  server.close()
+})
+
 test('socket state getters', async (t) => {
   t.plan(2)
 
