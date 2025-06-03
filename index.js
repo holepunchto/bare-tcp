@@ -34,9 +34,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._buffer = Buffer.alloc(readBufferSize)
 
-    this._multipleConnect = false
-    this._multipleConnectRemainingAttempts = []
-    this._multipleConnectErrors = []
+    this._addresses = null
+    this._errors = null
 
     this._handle = binding.init(
       this._buffer,
@@ -114,22 +113,16 @@ exports.Socket = class TCPSocket extends Duplex {
 
         const [firstAttempt, ...nextAttempts] = addresses
 
-        this._multipleConnect = nextAttempts.length > 0
-        this._multipleConnectRemainingAttempts = nextAttempts.map((address) => {
-          return [
-            port,
-            address.address,
-            { ...opts, family: address.family },
-            onconnect
-          ]
-        })
+        if (nextAttempts.length > 0) {
+          this._addresses = nextAttempts.map(({ address, family }) => {
+            return [port, address, { ...opts, family }, onconnect]
+          })
 
-        this.connect(
-          port,
-          firstAttempt.address,
-          { ...opts, family: firstAttempt.family },
-          onconnect
-        )
+          this._errors = []
+        }
+
+        const { address, family } = firstAttempt
+        this.connect(port, address, { ...opts, family }, onconnect)
       })
 
       return this
@@ -285,14 +278,12 @@ exports.Socket = class TCPSocket extends Duplex {
 
   _onconnect(err) {
     if (err) {
-      if (this._multipleConnect) {
-        this._multipleConnectErrors.push(err)
+      if (this._addresses !== null) {
+        this._errors.push(err)
 
-        if (this._multipleConnectRemainingAttempts.length > 0) {
-          return this._reset()
-        }
+        if (this._addresses.length > 0) return this._reset()
 
-        err = new AggregateError(this._multipleConnectErrors)
+        err = new AggregateError(this._errors)
       }
 
       if (this._pendingOpen) this._continueOpen(err)
@@ -307,8 +298,15 @@ exports.Socket = class TCPSocket extends Duplex {
     this.emit('connect')
   }
 
-  _onreset() {
-    this.connect(...this._multipleConnectRemainingAttempts.shift())
+  _onreset(err) {
+    if (err) {
+      this._errors.push(err)
+      this.destroy(new AggregateError(this._errors))
+
+      return
+    }
+
+    this.connect(...this._addresses.shift())
   }
 
   _onread(err, read) {

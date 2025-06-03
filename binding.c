@@ -287,31 +287,41 @@ bare_tcp__on_close(uv_handle_t *handle) {
   err = js_get_reference_value(env, tcp->ctx, &ctx);
   assert(err == 0);
 
-  if (tcp->resetting) {
+  if (tcp->resetting && !tcp->exiting) {
     uv_loop_t *loop;
     err = js_get_env_loop(env, &loop);
     assert(err == 0);
-
-    uv_tcp_t new_handle;
-    tcp->handle = new_handle;
-
-    err = uv_tcp_init(loop, &tcp->handle);
-
-    if (err < 0) {
-      js_throw_error(env, uv_err_name(err), uv_strerror(err));
-      return;
-    }
 
     js_value_t *on_reset;
     err = js_get_reference_value(env, tcp->on_reset, &on_reset);
     assert(err == 0);
 
-    js_call_function(env, ctx, on_reset, 0, NULL, NULL);
+    err = uv_tcp_init(loop, &tcp->handle);
+
+    js_value_t *argv[1];
+
+    if (err < 0) {
+      js_value_t *code;
+      err = js_create_string_utf8(env, (utf8_t *) uv_err_name(err), -1, &code);
+      assert(err == 0);
+
+      js_value_t *message;
+      err = js_create_string_utf8(env, (utf8_t *) uv_strerror(err), -1, &message);
+      assert(err == 0);
+
+      err = js_create_error(env, code, message, &argv[0]);
+      assert(err == 0);
+    } else {
+      err = js_get_null(env, &argv[0]);
+      assert(err == 0);
+    }
+
+    tcp->resetting = false;
+
+    js_call_function(env, ctx, on_reset, 1, argv, NULL);
 
     err = js_close_handle_scope(env, scope);
     assert(err == 0);
-
-    tcp->resetting = false;
 
   } else {
     js_deferred_teardown_t *teardown = tcp->teardown;
