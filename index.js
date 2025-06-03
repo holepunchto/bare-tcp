@@ -111,17 +111,19 @@ exports.Socket = class TCPSocket extends Duplex {
           return
         }
 
-        const [firstAttempt, ...nextAttempts] = addresses
+        const [{ address, family }, ...rest] = addresses
 
-        if (nextAttempts.length > 0) {
-          this._addresses = nextAttempts.map(({ address, family }) => {
-            return [port, address, { ...opts, family }, onconnect]
-          })
+        if (rest.length > 0) {
+          this._addresses = rest.map(({ address, family }) => [
+            port,
+            address,
+            { ...opts, family },
+            onconnect
+          ])
 
           this._errors = []
         }
 
-        const { address, family } = firstAttempt
         this.connect(port, address, { ...opts, family }, onconnect)
       })
 
@@ -283,7 +285,10 @@ exports.Socket = class TCPSocket extends Duplex {
 
         if (this._addresses.length > 0) return this._reset()
 
-        err = new AggregateError(this._errors)
+        err =
+          this._errors.length === 1
+            ? this._errors[0]
+            : new AggregateError(this._errors)
       }
 
       if (this._pendingOpen) this._continueOpen(err)
@@ -301,8 +306,11 @@ exports.Socket = class TCPSocket extends Duplex {
   _onreset(err) {
     if (err) {
       this._errors.push(err)
-      this.destroy(new AggregateError(this._errors))
-
+      this.destroy(
+        this._errors.length === 1
+          ? this._errors[0]
+          : new AggregateError(this._errors)
+      )
       return
     }
 
