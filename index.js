@@ -99,16 +99,16 @@ exports.Socket = class TCPSocket extends Duplex {
       lookup(host, { all: true, family, hints }, (err, addresses) => {
         if (this._state & constants.state.CLOSING) return
 
-        for (const { address, family } of addresses) {
-          this.emit('lookup', err, address, family, host)
-        }
-
         this._state &= ~constants.state.CONNECTING
 
         if (err) {
           if (this._pendingOpen) this._continueOpen(err)
           else this.destroy(err)
           return
+        }
+
+        for (const { address, family } of addresses) {
+          this.emit('lookup', err, address, family, host)
         }
 
         const [{ address, family }, ...rest] = addresses
