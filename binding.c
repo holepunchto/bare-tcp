@@ -38,7 +38,7 @@ bare_tcp__on_connection(uv_stream_t *server, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) server;
 
-  if (tcp->closing) return;
+  if (tcp->closing || tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -322,7 +322,6 @@ bare_tcp__on_close(uv_handle_t *handle) {
 
     err = js_close_handle_scope(env, scope);
     assert(err == 0);
-
   } else {
     js_deferred_teardown_t *teardown = tcp->teardown;
 
