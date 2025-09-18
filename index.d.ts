@@ -62,7 +62,6 @@ declare class TCPSocket<
     opts?: TCPSocketConnectOptions,
     onconnect?: () => void
   ): this
-
   connect(port: number, host: string, onconnect: () => void): this
   connect(port: number, onconnect: () => void): this
   connect(opts: TCPSocketConnectOptions): this
@@ -74,8 +73,8 @@ declare class TCPSocket<
 
   setTimeout(ms: number, ontimeout?: () => void): this
 
-  ref(): void
-  unref(): void
+  ref(): this
+  unref(): this
 }
 
 interface TCPServerEvents extends EventMap {
@@ -123,22 +122,20 @@ declare class TCPServer<
     opts?: TCPServerListenOptions,
     onlistening?: () => void
   ): this
-
   listen(
     port: number,
     host: string,
     backlog: number,
     onlistening: () => void
   ): this
-
   listen(port: number, host: string, onlistening: () => void): this
   listen(port: number, onlistening: () => void): this
   listen(onlistening: () => void): this
 
   close(onclose?: (err: Error) => void): void
 
-  ref(): void
-  unref(): void
+  ref(): this
+  unref(): this
 }
 
 declare function createConnection(

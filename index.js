@@ -203,10 +203,12 @@ exports.Socket = class TCPSocket extends Duplex {
 
   ref() {
     binding.ref(this._handle)
+    return this
   }
 
   unref() {
     binding.unref(this._handle)
+    return this
   }
 
   _open(cb) {
@@ -514,11 +516,13 @@ exports.Server = class TCPServer extends EventEmitter {
   ref() {
     this._state &= ~constants.state.UNREFED
     if (this._handle !== null) binding.ref(this._handle)
+    return this
   }
 
   unref() {
     this._state |= constants.state.UNREFED
     if (this._handle !== null) binding.unref(this._handle)
+    return this
   }
 
   _closeMaybe() {
