@@ -406,7 +406,9 @@ bare_tcp_init(js_env_t *env, js_callback_info_t *info) {
   err = uv_tcp_init(loop, &tcp->handle);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
     return NULL;
   }
 
@@ -485,7 +487,9 @@ bare_tcp_connect(js_env_t *env, js_callback_info_t *info) {
   }
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
     return NULL;
   }
 
@@ -496,8 +500,8 @@ bare_tcp_connect(js_env_t *env, js_callback_info_t *info) {
   err = uv_tcp_connect(req, &tcp->handle, (struct sockaddr *) &addr, bare_tcp__on_connect);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    return NULL;
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
   }
 
   return NULL;
@@ -570,21 +574,27 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
   }
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
     return NULL;
   }
 
   err = uv_tcp_bind(&tcp->handle, (struct sockaddr *) &addr, 0);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
     return NULL;
   }
 
   err = uv_listen((uv_stream_t *) &tcp->handle, backlog, bare_tcp__on_connection);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
     return NULL;
   }
 
@@ -592,7 +602,9 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
   err = uv_tcp_getsockname(&tcp->handle, (struct sockaddr *) &name, &addr_len);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
     return NULL;
   }
 
@@ -634,8 +646,8 @@ bare_tcp_accept(js_env_t *env, js_callback_info_t *info) {
   err = uv_accept((uv_stream_t *) &server->handle, (uv_stream_t *) &client->handle);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    return NULL;
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
   }
 
   return NULL;
@@ -662,8 +674,8 @@ bare_tcp_resume(js_env_t *env, js_callback_info_t *info) {
   err = uv_read_start((uv_stream_t *) &tcp->handle, bare_tcp__on_alloc, bare_tcp__on_read);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    return NULL;
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
   }
 
   return NULL;
@@ -690,8 +702,8 @@ bare_tcp_pause(js_env_t *env, js_callback_info_t *info) {
   err = uv_read_stop((uv_stream_t *) &tcp->handle);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    return NULL;
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
   }
 
   return NULL;
@@ -747,8 +759,8 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   free(bufs);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    return NULL;
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
   }
 
   return NULL;
@@ -777,8 +789,8 @@ bare_tcp_end(js_env_t *env, js_callback_info_t *info) {
   err = uv_shutdown(req, (uv_stream_t *) &tcp->handle, bare_tcp__on_shutdown);
 
   if (err < 0) {
-    js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    return NULL;
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
   }
 
   return NULL;
