@@ -734,11 +734,8 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   uv_buf_t *bufs = malloc(sizeof(uv_buf_t) * bufs_len);
 
   js_value_t **elements = malloc(sizeof(js_value_t *) * bufs_len);
-
-  uint32_t fetched;
-  err = js_get_array_elements(env, arr, elements, bufs_len, 0, &fetched);
+  err = js_get_array_elements(env, arr, elements, bufs_len, 0, NULL);
   assert(err == 0);
-  assert(fetched == bufs_len);
 
   for (uint32_t i = 0; i < bufs_len; i++) {
     js_value_t *item = elements[i];
@@ -748,8 +745,6 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
     assert(err == 0);
   }
 
-  free(elements);
-
   uv_write_t *req = &tcp->requests.write;
 
   req->data = tcp;
@@ -757,6 +752,7 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   err = uv_write(req, (uv_stream_t *) &tcp->handle, bufs, bufs_len, bare_tcp__on_write);
 
   free(bufs);
+  free(elements);
 
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
