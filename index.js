@@ -1,4 +1,3 @@
-/* global Bare */
 const EventEmitter = require('bare-events')
 const { Duplex } = require('bare-stream')
 const dns = require('bare-dns')
