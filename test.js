@@ -12,9 +12,7 @@ test('server + client', async (t) => {
     .on('connection', (socket) => {
       socket
         .on('close', () => lc.pass('server connection closed'))
-        .on('data', (data) =>
-          lc.alike(data.toString(), 'hello world', 'server received message')
-        )
+        .on('data', (data) => lc.alike(data.toString(), 'hello world', 'server received message'))
         .end()
     })
     .on('listening', () => lc.pass('server listening'))
@@ -45,9 +43,7 @@ test('connect IPv4 loopback', async (t) => {
     .on('connection', (socket) => {
       socket
         .on('close', () => lc.pass('server connection closed'))
-        .on('data', (data) =>
-          lc.alike(data.toString(), 'hello world', 'server received message')
-        )
+        .on('data', (data) => lc.alike(data.toString(), 'hello world', 'server received message'))
         .end()
     })
     .on('listening', () => lc.pass('server listening'))

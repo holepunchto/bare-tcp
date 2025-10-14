@@ -6,11 +6,7 @@ interface DNSLookup {
   (
     hostname: string,
     opts: LookupOptions,
-    cb: (
-      err: Error | null,
-      address: string | null,
-      family: IPFamily | 0
-    ) => void
+    cb: (err: Error | null, address: string | null, family: IPFamily | 0) => void
   ): void
 }
 
@@ -22,17 +18,11 @@ interface TCPSocketAddress {
 
 interface TCPSocketEvents extends DuplexEvents {
   connect: []
-  lookup: [
-    err: Error | null,
-    address: string | null,
-    family: IPFamily | 0,
-    host: string
-  ]
+  lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
   timeout: [ms: number]
 }
 
-interface TCPSocketOptions<S extends TCPSocket = TCPSocket>
-  extends DuplexOptions<S> {
+interface TCPSocketOptions<S extends TCPSocket = TCPSocket> extends DuplexOptions<S> {
   readBufferSize?: number
   allowHalfOpen?: boolean
 }
@@ -47,21 +37,14 @@ interface TCPSocketConnectOptions extends LookupOptions {
   timeout?: number
 }
 
-declare class TCPSocket<
-  M extends TCPSocketEvents = TCPSocketEvents
-> extends Duplex<M> {
+declare class TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<M> {
   constructor(opts?: TCPSocketOptions)
 
   readonly connecting: boolean
   readonly pending: boolean
   readonly timeout?: number
 
-  connect(
-    port: number,
-    host?: string,
-    opts?: TCPSocketConnectOptions,
-    onconnect?: () => void
-  ): this
+  connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
   connect(port: number, host: string, onconnect: () => void): this
   connect(port: number, onconnect: () => void): this
   connect(opts: TCPSocketConnectOptions): this
@@ -82,12 +65,7 @@ interface TCPServerEvents extends EventMap {
   connection: [socket: TCPSocket]
   error: [err: Error]
   listening: []
-  lookup: [
-    err: Error | null,
-    address: string | null,
-    family: IPFamily | 0,
-    host: string
-  ]
+  lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
 }
 
 interface TCPServerOptions {
@@ -105,9 +83,7 @@ interface TCPServerListenOptions extends LookupOptions {
   port?: number
 }
 
-declare class TCPServer<
-  M extends TCPServerEvents = TCPServerEvents
-> extends EventEmitter<M> {
+declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
   constructor(opts?: TCPServerOptions, onconnection?: () => void)
   constructor(onconnection: () => void)
 
@@ -122,12 +98,7 @@ declare class TCPServer<
     opts?: TCPServerListenOptions,
     onlistening?: () => void
   ): this
-  listen(
-    port: number,
-    host: string,
-    backlog: number,
-    onlistening: () => void
-  ): this
+  listen(port: number, host: string, backlog: number, onlistening: () => void): this
   listen(port: number, host: string, onlistening: () => void): this
   listen(port: number, onlistening: () => void): this
   listen(onlistening: () => void): this
@@ -145,30 +116,18 @@ declare function createConnection(
   onconnect?: () => void
 ): TCPSocket
 
-declare function createConnection(
-  port: number,
-  host: string,
-  onconnect: () => void
-): TCPSocket
+declare function createConnection(port: number, host: string, onconnect: () => void): TCPSocket
 
-declare function createConnection(
-  port: number,
-  onconnect: () => void
-): TCPSocket
+declare function createConnection(port: number, onconnect: () => void): TCPSocket
 
 declare function createConnection(
   opts: TCPSocketOptions & TCPSocketConnectOptions,
   onconnect: () => void
 ): TCPSocket
 
-declare function createConnection(
-  opts: TCPSocketOptions & TCPSocketConnectOptions
-): TCPSocket
+declare function createConnection(opts: TCPSocketOptions & TCPSocketConnectOptions): TCPSocket
 
-declare function createServer(
-  opts?: TCPServerOptions,
-  onconnection?: () => void
-): TCPServer
+declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
 
 declare function createServer(onconnection: () => void): TCPServer
 

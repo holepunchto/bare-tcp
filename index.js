@@ -12,8 +12,7 @@ exports.Socket = class TCPSocket extends Duplex {
   constructor(opts = {}) {
     super({ eagerOpen: true })
 
-    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true } =
-      opts
+    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true } = opts
 
     this._state = 0
 
@@ -62,10 +61,7 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect(port, host = 'localhost', opts = {}, onconnect) {
-    if (
-      this._state & constants.state.CONNECTING ||
-      this._state & constants.state.CONNECTED
-    ) {
+    if (this._state & constants.state.CONNECTING || this._state & constants.state.CONNECTED) {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
     }
 
@@ -288,10 +284,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
         if (this._addresses.length > 0) return this._reset()
 
-        err =
-          this._errors.length === 1
-            ? this._errors[0]
-            : new AggregateError(this._errors)
+        err = this._errors.length === 1 ? this._errors[0] : new AggregateError(this._errors)
       }
 
       if (this._pendingOpen) this._continueOpen(err)
@@ -309,11 +302,7 @@ exports.Socket = class TCPSocket extends Duplex {
   _onreset(err) {
     if (err) {
       this._errors.push(err)
-      this.destroy(
-        this._errors.length === 1
-          ? this._errors[0]
-          : new AggregateError(this._errors)
-      )
+      this.destroy(this._errors.length === 1 ? this._errors[0] : new AggregateError(this._errors))
       return
     }
 
@@ -370,8 +359,7 @@ exports.Server = class TCPServer extends EventEmitter {
 
     super()
 
-    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true } =
-      opts
+    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true } = opts
 
     this._state = 0
 
@@ -410,10 +398,7 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   listen(port = 0, host = 'localhost', backlog = 511, opts = {}, onlistening) {
-    if (
-      this._state & constants.state.BINDING ||
-      this._state & constants.state.BOUND
-    ) {
+    if (this._state & constants.state.BINDING || this._state & constants.state.BOUND) {
       throw errors.SERVER_ALREADY_LISTENING('Server is already listening')
     }
 
@@ -591,12 +576,7 @@ exports.isIP = ip.isIP
 exports.isIPv4 = ip.isIPv4
 exports.isIPv6 = ip.isIPv6
 
-exports.createConnection = function createConnection(
-  port,
-  host,
-  opts,
-  onconnect
-) {
+exports.createConnection = function createConnection(port, host, opts, onconnect) {
   if (typeof host === 'function') {
     onconnect = host
     host = 'localhost'
