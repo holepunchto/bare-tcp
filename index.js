@@ -61,6 +61,14 @@ exports.Socket = class TCPSocket extends Duplex {
     return this._timeout || undefined // For Node.js compatibility
   }
 
+  get readyState() {
+    if (this._state & constants.state.CONNECTED) {
+      return 'open'
+    }
+
+    return 'opening'
+  }
+
   connect(port, host = 'localhost', opts = {}, onconnect) {
     if (this._state & constants.state.CONNECTING || this._state & constants.state.CONNECTED) {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')

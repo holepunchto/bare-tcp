@@ -44,6 +44,7 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly connecting: boolean
   readonly pending: boolean
   readonly timeout?: number
+  readonly readyState: 'open' | 'opening'
 
   connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
   connect(port: number, host: string, onconnect: () => void): this
