@@ -1,6 +1,8 @@
 import EventEmitter, { EventMap } from 'bare-events'
-import { Duplex, DuplexOptions, DuplexEvents } from 'bare-stream'
+import { Duplex, DuplexEvents } from 'bare-stream'
 import { IPFamily, LookupOptions } from 'bare-dns'
+import TCPError from './lib/errors'
+import constants from './lib/constants'
 
 interface DNSLookup {
   (
@@ -22,9 +24,10 @@ interface TCPSocketEvents extends DuplexEvents {
   timeout: [ms: number]
 }
 
-interface TCPSocketOptions<S extends TCPSocket = TCPSocket> extends DuplexOptions<S> {
-  readBufferSize?: number
+interface TCPSocketOptions {
   allowHalfOpen?: boolean
+  eagerOpen?: boolean
+  readBufferSize?: number
 }
 
 interface TCPSocketConnectOptions extends LookupOptions {
@@ -37,9 +40,7 @@ interface TCPSocketConnectOptions extends LookupOptions {
   timeout?: number
 }
 
-declare class TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<M> {
-  constructor(opts?: TCPSocketOptions)
-
+interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<M> {
   readonly connecting: boolean
   readonly pending: boolean
   readonly timeout?: number
@@ -60,6 +61,10 @@ declare class TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Dup
   unref(): this
 }
 
+declare class TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<M> {
+  constructor(opts?: TCPSocketOptions)
+}
+
 interface TCPServerEvents extends EventMap {
   close: []
   connection: [socket: TCPSocket]
@@ -73,6 +78,7 @@ interface TCPServerOptions {
   keepAlive?: boolean
   keepAliveInitialDelay?: boolean
   noDelay?: boolean
+  pauseOnConnect?: boolean
   readBufferSize?: number
 }
 
@@ -83,10 +89,7 @@ interface TCPServerListenOptions extends LookupOptions {
   port?: number
 }
 
-declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
-  constructor(opts?: TCPServerOptions, onconnection?: () => void)
-  constructor(onconnection: () => void)
-
+interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
   readonly listening: boolean
 
   address(): TCPSocketAddress
@@ -103,10 +106,15 @@ declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends Eve
   listen(port: number, onlistening: () => void): this
   listen(onlistening: () => void): this
 
-  close(onclose?: (err: Error) => void): void
+  close(onclose?: (err?: Error) => void): this
 
   ref(): this
   unref(): this
+}
+
+declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
+  constructor(opts?: TCPServerOptions, onconnection?: () => void)
+  constructor(onconnection: () => void)
 }
 
 declare function createConnection(
@@ -130,27 +138,6 @@ declare function createConnection(opts: TCPSocketOptions & TCPSocketConnectOptio
 declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
 
 declare function createServer(onconnection: () => void): TCPServer
-
-declare const constants: {
-  state: {
-    CONNECTING: number
-    CONNECTED: number
-    BINDING: number
-    BOUND: number
-    READING: number
-    CLOSING: number
-    UNREFED: number
-  }
-}
-
-declare class TCPError extends Error {
-  readonly code: string
-
-  static SOCKET_ALREADY_CONNECTED(msg: string): TCPError
-  static SERVER_ALREADY_LISTENING(msg: string): TCPError
-  static SERVER_IS_CLOSED(msg: string): TCPError
-  static INVALID_HOST(msg?: string): TCPError
-}
 
 declare function isIP(host: string): IPFamily | 0
 

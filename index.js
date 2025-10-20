@@ -7,12 +7,13 @@ const errors = require('./lib/errors')
 const ip = require('./lib/ip')
 
 const defaultReadBufferSize = 65536
+const empty = Buffer.alloc(0)
 
 exports.Socket = class TCPSocket extends Duplex {
   constructor(opts = {}) {
-    super({ eagerOpen: true })
+    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true, eagerOpen = true } = opts
 
-    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true } = opts
+    super({ eagerOpen })
 
     this._state = 0
 
@@ -86,11 +87,18 @@ exports.Socket = class TCPSocket extends Duplex {
 
     if (!host) host = 'localhost'
 
+    const {
+      lookup = dns.lookup,
+      hints,
+      keepAlive = false,
+      keepAliveInitialDelay = 0,
+      noDelay = false,
+      timeout
+    } = opts
+
     const type = ip.isIP(host)
 
     if (type === 0) {
-      const { lookup = dns.lookup, hints } = opts
-
       lookup(host, { all: true, family, hints }, (err, addresses) => {
         if (this._state & constants.state.CLOSING) return
 
@@ -132,17 +140,9 @@ exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.connect(this._handle, port, host, family)
 
-      if (opts.keepAlive === true) {
-        this.setKeepAlive(opts.keepAlive, opts.keepAliveInitialDelay)
-      }
-
-      if (opts.noDelay === true) {
-        this.setNoDelay()
-      }
-
-      if (opts.timeout) {
-        this.setTimeout(opts.timeout)
-      }
+      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
+      if (noDelay) this.setNoDelay()
+      if (timeout) this.setTimeout(timeout)
 
       this._remotePort = port
       this._remoteHost = host
@@ -183,6 +183,7 @@ exports.Socket = class TCPSocket extends Duplex {
   setTimeout(ms, ontimeout) {
     if (ms === 0) {
       clearTimeout(this._timer)
+
       this._timer = null
     } else {
       if (ontimeout) this.once('timeout', ontimeout)
@@ -198,28 +199,33 @@ exports.Socket = class TCPSocket extends Duplex {
 
   ref() {
     binding.ref(this._handle)
+
     return this
   }
 
   unref() {
     binding.unref(this._handle)
+
     return this
   }
 
   _open(cb) {
     if (this._state & constants.state.CONNECTED) return cb(null)
+
     this._pendingOpen = cb
   }
 
   _read() {
     if ((this._state & constants.state.READING) === 0) {
       this._state |= constants.state.READING
+
       binding.resume(this._handle)
     }
   }
 
   _writev(batch, cb) {
     this._pendingWrite = [cb, batch]
+
     binding.writev(
       this._handle,
       batch.map(({ chunk }) => chunk)
@@ -228,19 +234,23 @@ exports.Socket = class TCPSocket extends Duplex {
 
   _final(cb) {
     this._pendingFinal = cb
+
     binding.end(this._handle)
   }
 
   _predestroy() {
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
+
     binding.close(this._handle)
   }
 
   _destroy(err, cb) {
     if (this._state & constants.state.CLOSING) return cb(err)
     this._state |= constants.state.CLOSING
+
     this._pendingDestroy = cb
+
     binding.close(this._handle)
   }
 
@@ -274,6 +284,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
   _reset() {
     this._state = 0
+
     binding.reset(this._handle)
   }
 
@@ -328,6 +339,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
     if (this.push(copy) === false && this.destroying === false) {
       this._state &= ~constants.state.READING
+
       binding.pause(this._handle)
     }
   }
@@ -359,16 +371,23 @@ exports.Server = class TCPServer extends EventEmitter {
 
     super()
 
-    const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true } = opts
+    const {
+      readBufferSize = defaultReadBufferSize,
+      allowHalfOpen = true,
+      keepAlive = false,
+      keepAliveInitialDelay = 0,
+      noDelay = false,
+      pauseOnConnect = false
+    } = opts
 
     this._state = 0
 
     this._readBufferSize = readBufferSize
     this._allowHalfOpen = allowHalfOpen
-
-    this._keepAlive = opts.keepAlive
-    this._keepAliveDelay = opts.keepAliveInitialDelay
-    this._noDelay = opts.noDelay
+    this._keepAlive = keepAlive
+    this._keepAliveInitialDelay = keepAliveInitialDelay
+    this._noDelay = noDelay
+    this._pauseOnConnect = pauseOnConnect
 
     this._port = -1
     this._host = null
@@ -435,11 +454,11 @@ exports.Server = class TCPServer extends EventEmitter {
     if (!host) host = 'localhost'
     if (!backlog) backlog = 511
 
+    const { lookup = dns.lookup, hints } = opts
+
     const type = ip.isIP(host)
 
     if (type === 0) {
-      const { lookup = dns.lookup, hints } = opts
-
       lookup(host, { family, hints }, (err, address, family) => {
         if (this._state & constants.state.CLOSING) return
 
@@ -492,20 +511,28 @@ exports.Server = class TCPServer extends EventEmitter {
 
   close(onclose) {
     if (onclose) this.once('close', onclose)
-    if (this._state & constants.state.CLOSING) return
+
+    if (this._state & constants.state.CLOSING) return this
     this._state |= constants.state.CLOSING
+
     this._closeMaybe()
+
+    return this
   }
 
   ref() {
     this._state &= ~constants.state.UNREFED
+
     if (this._handle !== null) binding.ref(this._handle)
+
     return this
   }
 
   unref() {
     this._state |= constants.state.UNREFED
+
     if (this._handle !== null) binding.unref(this._handle)
+
     return this
   }
 
@@ -526,7 +553,8 @@ exports.Server = class TCPServer extends EventEmitter {
 
     const socket = new exports.Socket({
       readBufferSize: this._readBufferSize,
-      allowHalfOpen: this._allowHalfOpen
+      allowHalfOpen: this._allowHalfOpen,
+      eagerOpen: !this._pauseOnConnect
     })
 
     try {
@@ -536,13 +564,8 @@ exports.Server = class TCPServer extends EventEmitter {
 
       this._connections.add(socket)
 
-      if (this._keepAlive === true) {
-        socket.setKeepAlive(this._keepAlive, this._keepAliveDelay)
-      }
-
-      if (this._noDelay === true) {
-        socket.setNoDelay()
-      }
+      if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+      if (this._noDelay) socket.setNoDelay()
 
       socket.on('close', () => {
         this._connections.delete(socket)
@@ -600,7 +623,5 @@ exports.connect = exports.createConnection
 exports.createServer = function createServer(opts, onconnection) {
   return new exports.Server(opts, onconnection)
 }
-
-const empty = Buffer.alloc(0)
 
 function noop() {}
