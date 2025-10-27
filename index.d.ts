@@ -92,6 +92,8 @@ interface TCPServerListenOptions extends LookupOptions {
 
 interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
   readonly listening: boolean
+  readonly closing: boolean
+  readonly connections: Set<TCPSocket>
 
   address(): TCPSocketAddress
 

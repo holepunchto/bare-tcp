@@ -412,6 +412,14 @@ exports.Server = class TCPServer extends EventEmitter {
     return (this._state & constants.state.BOUND) !== 0
   }
 
+  get closing() {
+    return (this._state & constants.state.CLOSING) !== 0
+  }
+
+  get connections() {
+    return this._connections
+  }
+
   address() {
     if ((this._state & constants.state.BOUND) === 0) {
       return null
