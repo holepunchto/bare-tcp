@@ -365,7 +365,6 @@ exports.Socket = class TCPSocket extends Duplex {
   _onclose() {
     clearTimeout(this._timer)
 
-    this._handle = null
     this._continueDestroy()
   }
 }
@@ -517,9 +516,12 @@ exports.Server = class TCPServer extends EventEmitter {
 
       queueMicrotask(() => this.emit('listening'))
     } catch (err) {
+      const handle = this._handle
+
+      this._handle = null
       this._error = err
 
-      binding.close(this._handle)
+      binding.close(handle)
     }
 
     return this
@@ -601,7 +603,6 @@ exports.Server = class TCPServer extends EventEmitter {
 
     this._state &= ~constants.state.BINDING
     this._error = null
-    this._handle = null
 
     if (err) this.emit('error', err)
     else this.emit('close')
