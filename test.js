@@ -84,7 +84,7 @@ test('remote address', async (t) => {
 
   const server = createServer((socket) => {
     socket.on('close', () => server.close()).end()
-  }).listen()
+  }).listen(0, '127.0.0.1')
 
   await waitForServer(server)
 
