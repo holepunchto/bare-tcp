@@ -79,8 +79,8 @@ test('socket state getters', async (t) => {
   server.close()
 })
 
-test('remote address', async (t) => {
-  t.plan(3)
+test('address getters', async (t) => {
+  t.plan(6)
 
   const server = createServer((socket) => {
     socket.on('close', () => server.close()).end()
@@ -92,6 +92,10 @@ test('remote address', async (t) => {
 
   const socket = createConnection(serverPort)
     .on('connect', () => {
+      t.is(socket.localAddress, '127.0.0.1')
+      t.is(socket.localFamily, 'IPv4')
+      t.is(typeof socket.localPort, 'number')
+
       t.is(socket.remoteAddress, '127.0.0.1')
       t.is(socket.remoteFamily, 'IPv4')
       t.is(socket.remotePort, serverPort)

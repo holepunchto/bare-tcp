@@ -19,9 +19,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._allowHalfOpen = allowHalfOpen
 
-    this._remotePort = -1
-    this._remoteHost = null
-    this._remoteFamily = 0
+    this._localAddress = null
+    this._remoteAddress = null
 
     this._pendingOpen = null
     this._pendingWrite = null
@@ -69,16 +68,28 @@ exports.Socket = class TCPSocket extends Duplex {
     return 'opening'
   }
 
+  get localAddress() {
+    if (this._state & constants.state.CONNECTED) return this._localAddress.address
+  }
+
+  get localFamily() {
+    if (this._state & constants.state.CONNECTED) return `IPv${this._localAddress.family}`
+  }
+
+  get localPort() {
+    if (this._state & constants.state.CONNECTED) return this._localAddress.port
+  }
+
   get remoteAddress() {
-    if (this._state & constants.state.CONNECTED) return this._remoteHost
+    if (this._state & constants.state.CONNECTED) return this._remoteAddress.address
   }
 
   get remoteFamily() {
-    if (this._state & constants.state.CONNECTED) return `IPv${this._remoteFamily}`
+    if (this._state & constants.state.CONNECTED) return `IPv${this._remoteAddress.family}`
   }
 
   get remotePort() {
-    if (this._state & constants.state.CONNECTED) return this._remotePort
+    if (this._state & constants.state.CONNECTED) return this._remoteAddress.port
   }
 
   connect(port, host = 'localhost', opts = {}, onconnect) {
@@ -163,10 +174,6 @@ exports.Socket = class TCPSocket extends Duplex {
       if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
       if (noDelay) this.setNoDelay()
       if (timeout) this.setTimeout(timeout)
-
-      this._remotePort = port
-      this._remoteHost = host
-      this._remoteFamily = family
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
@@ -305,6 +312,9 @@ exports.Socket = class TCPSocket extends Duplex {
   _reset() {
     this._state = 0
 
+    this._localAddress = null
+    this._remoteAddress = null
+
     binding.reset(this._handle)
   }
 
@@ -326,6 +336,9 @@ exports.Socket = class TCPSocket extends Duplex {
     this._state |= constants.state.CONNECTED
     this._state &= ~constants.state.CONNECTING
     this._continueOpen()
+
+    this._localAddress = binding.address(this._handle, true)
+    this._remoteAddress = binding.address(this._handle, false)
 
     this.emit('connect')
   }

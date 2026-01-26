@@ -45,6 +45,9 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly pending: boolean
   readonly timeout?: number
   readonly readyState: 'open' | 'opening'
+  readonly localAddress?: string
+  readonly localFamily?: string
+  readonly localPort?: number
   readonly remoteAddress?: string
   readonly remoteFamily?: string
   readonly remotePort?: number

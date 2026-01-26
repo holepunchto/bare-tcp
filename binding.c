@@ -872,6 +872,101 @@ bare_tcp_nodelay(js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_address(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 2;
+  js_value_t *argv[2];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 2);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  bool local;
+  err = js_get_value_bool(env, argv[1], &local);
+  assert(err == 0);
+
+  struct sockaddr_storage addr;
+  int len = sizeof(addr);
+
+  if (local) {
+    err = uv_tcp_getsockname(&tcp->handle, (struct sockaddr *) &addr, &len);
+  } else {
+    err = uv_tcp_getpeername(&tcp->handle, (struct sockaddr *) &addr, &len);
+  }
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
+    return NULL;
+  }
+
+  js_value_t *result;
+  err = js_create_object(env, &result);
+  assert(err == 0);
+
+  js_value_t *result_address;
+  js_value_t *result_family;
+  js_value_t *result_port;
+
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in *addr_in = (struct sockaddr_in *) &addr;
+
+    char address[INET_ADDRSTRLEN];
+    err = uv_inet_ntop(AF_INET, &(addr_in->sin_addr), address, sizeof(address));
+    assert(err == 0);
+
+    err = js_create_string_utf8(env, (utf8_t *) address, -1, &result_address);
+    assert(err == 0);
+
+    err = js_create_int32(env, 4, &result_family);
+    assert(err == 0);
+
+    err = js_create_int32(env, ntohs(addr_in->sin_port), &result_port);
+    assert(err == 0);
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) &addr;
+
+    char address[INET6_ADDRSTRLEN];
+    err = uv_inet_ntop(AF_INET6, &(addr_in6->sin6_addr), address, sizeof(address));
+    assert(err == 0);
+
+    err = js_create_string_utf8(env, (utf8_t *) address, -1, &result_address);
+    assert(err == 0);
+
+    err = js_create_int32(env, 6, &result_family);
+    assert(err == 0);
+
+    err = js_create_int32(env, ntohs(addr_in6->sin6_port), &result_port);
+    assert(err == 0);
+  } else {
+    err = UV_EAI_ADDRFAMILY;
+
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
+    return NULL;
+  }
+
+  err = js_set_named_property(env, result, "address", result_address);
+  assert(err == 0);
+
+  err = js_set_named_property(env, result, "family", result_family);
+  assert(err == 0);
+
+  err = js_set_named_property(env, result, "port", result_port);
+  assert(err == 0);
+
+  return result;
+}
+
+static js_value_t *
 bare_tcp_ref(js_env_t *env, js_callback_info_t *info) {
   int err;
 
@@ -938,6 +1033,7 @@ bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   V("close", bare_tcp_close)
   V("keepalive", bare_tcp_keepalive)
   V("nodelay", bare_tcp_nodelay)
+  V("address", bare_tcp_address)
   V("ref", bare_tcp_ref)
   V("unref", bare_tcp_unref)
 #undef V
