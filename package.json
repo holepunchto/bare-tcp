@@ -1,6 +1,6 @@
 {
   "name": "bare-tcp",
-  "version": "2.2.2",
+  "version": "2.2.3-0",
   "description": "Native TCP sockets for JavaScript",
   "exports": {
     ".": {
