@@ -79,6 +79,26 @@ test('socket state getters', async (t) => {
   server.close()
 })
 
+test('remote address', async (t) => {
+  t.plan(3)
+
+  const server = createServer((socket) => {
+    socket.on('close', () => server.close()).end()
+  }).listen()
+
+  await waitForServer(server)
+
+  const { port: serverPort } = server.address()
+
+  const socket = createConnection(serverPort)
+    .on('connect', () => {
+      t.is(socket.remoteAddress, '127.0.0.1')
+      t.is(socket.remoteFamily, 'IPv4')
+      t.is(socket.remotePort, serverPort)
+    })
+    .end()
+})
+
 test('port already in use', async (t) => {
   t.plan(1)
 

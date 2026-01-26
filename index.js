@@ -69,6 +69,18 @@ exports.Socket = class TCPSocket extends Duplex {
     return 'opening'
   }
 
+  get remoteAddress() {
+    if (this._state & constants.state.CONNECTED) return this._remoteHost
+  }
+
+  get remoteFamily() {
+    if (this._state & constants.state.CONNECTED) return `IPv${this._remoteFamily}`
+  }
+
+  get remotePort() {
+    if (this._state & constants.state.CONNECTED) return this._remotePort
+  }
+
   connect(port, host = 'localhost', opts = {}, onconnect) {
     if (this._state & constants.state.CONNECTING || this._state & constants.state.CONNECTED) {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
