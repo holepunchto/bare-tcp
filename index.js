@@ -421,9 +421,7 @@ exports.Server = class TCPServer extends EventEmitter {
     this._noDelay = noDelay
     this._pauseOnConnect = pauseOnConnect
 
-    this._port = -1
-    this._host = null
-    this._family = 0
+    this._address = null
     this._connections = new Set()
 
     this._error = null
@@ -445,15 +443,11 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   address() {
-    if ((this._state & constants.state.BOUND) === 0) {
-      return null
-    }
+    if ((this._state & constants.state.BOUND) === 0) return null
 
-    return {
-      address: this._host,
-      family: `IPv${this._family}`,
-      port: this._port
-    }
+    const { address, family, port } = this._address
+
+    return { address, family: `IPv${family}`, port }
   }
 
   listen(port = 0, host = 'localhost', backlog = 511, opts = {}, onlistening) {
@@ -531,9 +525,10 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     try {
-      this._port = binding.bind(this._handle, port, host, backlog, family)
-      this._host = host
-      this._family = family
+      binding.bind(this._handle, port, host, backlog, family)
+
+      this._address = binding.address(this._handle, true)
+
       this._state |= constants.state.BOUND
       this._state &= ~constants.state.BINDING
 
@@ -626,6 +621,7 @@ exports.Server = class TCPServer extends EventEmitter {
     this._state &= ~constants.state.BINDING
     this._error = null
     this._handle = null
+    this._address = null
 
     if (err) this.emit('error', err)
     else this.emit('close')
