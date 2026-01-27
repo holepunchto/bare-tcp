@@ -597,6 +597,9 @@ exports.Server = class TCPServer extends EventEmitter {
 
       socket._state |= constants.state.CONNECTED
 
+      socket._localAddress = binding.address(socket._handle, true)
+      socket._remoteAddress = binding.address(socket._handle, false)
+
       this._connections.add(socket)
 
       if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
