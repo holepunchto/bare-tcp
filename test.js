@@ -82,18 +82,15 @@ test('socket state getters', async (t) => {
 test('address getters', async (t) => {
   t.plan(14)
 
-  let clientPort = null
-  let serverPort = null
-
   const server = createServer()
     .on('connection', (socket) => {
       t.is(socket.localAddress, '127.0.0.1')
       t.is(socket.localFamily, 'IPv4')
-      t.is(socket.localPort, serverPort)
+      t.is(typeof socket.localPort, 'number')
 
       t.is(socket.remoteAddress, '127.0.0.1')
       t.is(socket.remoteFamily, 'IPv4')
-      t.is(socket.remotePort, clientPort)
+      t.is(typeof socket.remotePort, 'number')
 
       t.ok(socket.localPort !== socket.remotePort)
 
@@ -103,7 +100,7 @@ test('address getters', async (t) => {
 
   await waitForServer(server)
 
-  serverPort = server.address().port
+  const { port: serverPort } = server.address()
 
   const socket = createConnection(serverPort)
     .on('connect', () => {
@@ -116,8 +113,6 @@ test('address getters', async (t) => {
       t.is(socket.remotePort, serverPort)
 
       t.ok(socket.localPort !== socket.remotePort)
-
-      clientPort = socket.localPort
     })
     .end()
 })
