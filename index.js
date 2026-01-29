@@ -19,9 +19,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._allowHalfOpen = allowHalfOpen
 
-    this._remotePort = -1
-    this._remoteHost = null
-    this._remoteFamily = 0
+    this._localAddress = null
+    this._remoteAddress = null
 
     this._pendingOpen = null
     this._pendingWrite = null
@@ -67,6 +66,30 @@ exports.Socket = class TCPSocket extends Duplex {
     }
 
     return 'opening'
+  }
+
+  get localAddress() {
+    if (this._state & constants.state.CONNECTED) return this._localAddress.address
+  }
+
+  get localFamily() {
+    if (this._state & constants.state.CONNECTED) return `IPv${this._localAddress.family}`
+  }
+
+  get localPort() {
+    if (this._state & constants.state.CONNECTED) return this._localAddress.port
+  }
+
+  get remoteAddress() {
+    if (this._state & constants.state.CONNECTED) return this._remoteAddress.address
+  }
+
+  get remoteFamily() {
+    if (this._state & constants.state.CONNECTED) return `IPv${this._remoteAddress.family}`
+  }
+
+  get remotePort() {
+    if (this._state & constants.state.CONNECTED) return this._remoteAddress.port
   }
 
   connect(port, host = 'localhost', opts = {}, onconnect) {
@@ -151,10 +174,6 @@ exports.Socket = class TCPSocket extends Duplex {
       if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
       if (noDelay) this.setNoDelay()
       if (timeout) this.setTimeout(timeout)
-
-      this._remotePort = port
-      this._remoteHost = host
-      this._remoteFamily = family
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
@@ -293,6 +312,9 @@ exports.Socket = class TCPSocket extends Duplex {
   _reset() {
     this._state = 0
 
+    this._localAddress = null
+    this._remoteAddress = null
+
     binding.reset(this._handle)
   }
 
@@ -314,6 +336,9 @@ exports.Socket = class TCPSocket extends Duplex {
     this._state |= constants.state.CONNECTED
     this._state &= ~constants.state.CONNECTING
     this._continueOpen()
+
+    this._localAddress = binding.address(this._handle, true)
+    this._remoteAddress = binding.address(this._handle, false)
 
     this.emit('connect')
   }
@@ -396,9 +421,7 @@ exports.Server = class TCPServer extends EventEmitter {
     this._noDelay = noDelay
     this._pauseOnConnect = pauseOnConnect
 
-    this._port = -1
-    this._host = null
-    this._family = 0
+    this._address = null
     this._connections = new Set()
 
     this._error = null
@@ -420,15 +443,11 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   address() {
-    if ((this._state & constants.state.BOUND) === 0) {
-      return null
-    }
+    if ((this._state & constants.state.BOUND) === 0) return null
 
-    return {
-      address: this._host,
-      family: `IPv${this._family}`,
-      port: this._port
-    }
+    const { address, family, port } = this._address
+
+    return { address, family: `IPv${family}`, port }
   }
 
   listen(port = 0, host = 'localhost', backlog = 511, opts = {}, onlistening) {
@@ -506,9 +525,10 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     try {
-      this._port = binding.bind(this._handle, port, host, backlog, family)
-      this._host = host
-      this._family = family
+      binding.bind(this._handle, port, host, backlog, family)
+
+      this._address = binding.address(this._handle, true)
+
       this._state |= constants.state.BOUND
       this._state &= ~constants.state.BINDING
 
@@ -577,6 +597,9 @@ exports.Server = class TCPServer extends EventEmitter {
 
       socket._state |= constants.state.CONNECTED
 
+      socket._localAddress = binding.address(socket._handle, true)
+      socket._remoteAddress = binding.address(socket._handle, false)
+
       this._connections.add(socket)
 
       if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
@@ -601,6 +624,7 @@ exports.Server = class TCPServer extends EventEmitter {
     this._state &= ~constants.state.BINDING
     this._error = null
     this._handle = null
+    this._address = null
 
     if (err) this.emit('error', err)
     else this.emit('close')
