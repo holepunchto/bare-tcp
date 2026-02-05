@@ -69,27 +69,27 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   get localAddress() {
-    if (this._state & constants.state.CONNECTED) return this._localAddress.address
+    if (this._localAddress) return this._localAddress.address
   }
 
   get localFamily() {
-    if (this._state & constants.state.CONNECTED) return `IPv${this._localAddress.family}`
+    if (this._localAddress) return `IPv${this._localAddress.family}`
   }
 
   get localPort() {
-    if (this._state & constants.state.CONNECTED) return this._localAddress.port
+    if (this._localAddress) return this._localAddress.port
   }
 
   get remoteAddress() {
-    if (this._state & constants.state.CONNECTED) return this._remoteAddress.address
+    if (this._remoteAddress) return this._remoteAddress.address
   }
 
   get remoteFamily() {
-    if (this._state & constants.state.CONNECTED) return `IPv${this._remoteAddress.family}`
+    if (this._remoteAddress) return `IPv${this._remoteAddress.family}`
   }
 
   get remotePort() {
-    if (this._state & constants.state.CONNECTED) return this._remoteAddress.port
+    if (this._remoteAddress) return this._remoteAddress.port
   }
 
   connect(port, host = 'localhost', opts = {}, onconnect) {
