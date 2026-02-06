@@ -102,7 +102,7 @@ test.solo('address getters', async (t) => {
 
   const { port: serverPort } = server.address()
 
-  const socket = createConnection({ port: serverPort, keepAlive: 1000 })
+  const socket = createConnection({ port: serverPort, noDelay: true, keepAlive: 1000 })
     .on('connect', () => {
       t.is(socket.localAddress, '127.0.0.1')
       t.is(socket.localFamily, 'IPv4')
