@@ -79,7 +79,7 @@ test('socket state getters', async (t) => {
   server.close()
 })
 
-test('address getters', async (t) => {
+test.solo('address getters', async (t) => {
   t.plan(14)
 
   const server = createServer()
@@ -102,7 +102,7 @@ test('address getters', async (t) => {
 
   const { port: serverPort } = server.address()
 
-  const socket = createConnection(serverPort)
+  const socket = createConnection({ port: serverPort, keepAlive: 1000 })
     .on('connect', () => {
       t.is(socket.localAddress, '127.0.0.1')
       t.is(socket.localFamily, 'IPv4')
