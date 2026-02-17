@@ -79,7 +79,7 @@ test('socket state getters', async (t) => {
   server.close()
 })
 
-test.solo('address getters', async (t) => {
+test('address getters', async (t) => {
   t.plan(14)
 
   const server = createServer()
