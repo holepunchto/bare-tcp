@@ -924,10 +924,12 @@ bare_tcp_address(js_env_t *env, js_callback_info_t *info) {
     err = js_create_int32(env, ntohs(addr_in6->sin6_port), &result_port);
     assert(err == 0);
   } else {
-    err = js_get_null(env, &result);
+    err = UV_EAI_ADDRFAMILY;
+
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
     assert(err == 0);
 
-    return result;
+    return NULL;
   }
 
   err = js_set_named_property(env, result, "address", result_address);
