@@ -19,9 +19,9 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._allowHalfOpen = allowHalfOpen
 
-    this._keepAlive = null
-    this._keepAliveInitialDelay = null
-    this._noDelay = null
+    this._keepAlive = 0
+    this._keepAliveInitialDelay = 0
+    this._noDelay = 0
 
     this._localAddress = null
     this._remoteAddress = null
