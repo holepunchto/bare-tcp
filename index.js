@@ -624,7 +624,7 @@ exports.Server = class TCPServer extends EventEmitter {
     } catch (err) {
       socket.destroy()
 
-      throw err
+      this.emit('error', err)
     }
   }
 
