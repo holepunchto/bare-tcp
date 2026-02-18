@@ -19,6 +19,10 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._allowHalfOpen = allowHalfOpen
 
+    this._keepAlive = 0
+    this._keepAliveInitialDelay = 0
+    this._noDelay = 0
+
     this._localAddress = null
     this._remoteAddress = null
 
@@ -171,8 +175,11 @@ exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.connect(this._handle, port, host, family)
 
-      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-      if (noDelay) this.setNoDelay()
+      if (keepAlive) {
+        this._keepAlive = keepAlive
+        this._keepAliveInitialDelay = keepAliveInitialDelay
+      }
+      if (noDelay) this._noDelay = noDelay
       if (timeout) this.setTimeout(timeout)
 
       if (onconnect) this.once('connect', onconnect)
@@ -332,6 +339,9 @@ exports.Socket = class TCPSocket extends Duplex {
       else this.destroy(err)
       return
     }
+
+    if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+    if (this._noDelay) this.setNoDelay()
 
     this._localAddress = binding.address(this._handle, true)
     this._remoteAddress = binding.address(this._handle, false)
