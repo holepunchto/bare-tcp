@@ -139,8 +139,13 @@ exports.Socket = class TCPSocket extends Duplex {
 
         this._state &= ~constants.state.CONNECTING
 
-        if (err) {
-          this.emit('lookup', err)
+        if (err || addresses.length === 0) {
+          if (!err) {
+            err = new Error(`No address found for host "${host}"`)
+            err.code = 'ENOTFOUND'
+          }
+
+          this.emit('lookup', err, null, 0, host)
 
           if (this._pendingOpen) this._continueOpen(err)
           else this.destroy(err)
