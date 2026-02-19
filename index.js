@@ -628,6 +628,7 @@ exports.Server = class TCPServer extends EventEmitter {
       this.emit('connection', socket)
     } catch (err) {
       socket.destroy()
+
       this.emit('error', err)
     }
   }

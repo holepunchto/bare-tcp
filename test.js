@@ -292,13 +292,13 @@ test('connect handles empty DNS lookup results', (t) => {
     host: 'localhost',
     port: 1234,
     lookup(hostname, opts, cb) {
-      t.is(hostname, 'localhost', 'uses custom lookup')
+      t.is(hostname, 'localhost')
       cb(null, [])
     }
   })
 
   socket.on('error', (err) => {
-    t.is(err.code, 'ENOTFOUND', 'returns ENOTFOUND when lookup has no addresses')
+    t.is(err.code, 'ENOTFOUND')
   })
 })
 
