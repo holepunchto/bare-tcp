@@ -285,6 +285,23 @@ test('handle invalid host', (t) => {
   server.on('error', (err) => t.ok(err)).listen(0, 'garbage')
 })
 
+test('connect handles empty DNS lookup results', (t) => {
+  t.plan(2)
+
+  const socket = createConnection({
+    host: 'localhost',
+    port: 1234,
+    lookup(hostname, opts, cb) {
+      t.is(hostname, 'localhost', 'uses custom lookup')
+      cb(null, [])
+    }
+  })
+
+  socket.on('error', (err) => {
+    t.is(err.code, 'ENOTFOUND', 'returns ENOTFOUND when lookup has no addresses')
+  })
+})
+
 test('basic timeout', async (t) => {
   const sub = t.test()
   sub.plan(3)

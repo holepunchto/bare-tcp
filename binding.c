@@ -14,7 +14,6 @@ typedef struct {
   } requests;
 
   uv_buf_t read;
-  uv_buf_t *write_bufs;
 
   js_env_t *env;
   js_ref_t *ctx;
@@ -186,11 +185,6 @@ bare_tcp__on_write(uv_write_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->write_bufs != NULL) {
-    free(tcp->write_bufs);
-    tcp->write_bufs = NULL;
-  }
-
   if (tcp->exiting) return;
 
   js_env_t *env = tcp->env;
@@ -282,11 +276,6 @@ bare_tcp__on_close(uv_handle_t *handle) {
   int err;
 
   bare_tcp_t *tcp = (bare_tcp_t *) handle;
-
-  if (tcp->write_bufs != NULL) {
-    free(tcp->write_bufs);
-    tcp->write_bufs = NULL;
-  }
 
   js_env_t *env = tcp->env;
 
@@ -427,7 +416,6 @@ bare_tcp_init(js_env_t *env, js_callback_info_t *info) {
   tcp->resetting = false;
   tcp->closing = false;
   tcp->exiting = false;
-  tcp->write_bufs = NULL;
 
   err = js_get_typedarray_info(env, argv[0], NULL, (void **) &tcp->read.base, (size_t *) &tcp->read.len, NULL, NULL);
   assert(err == 0);
@@ -721,67 +709,30 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   err = js_get_array_length(env, arr, &bufs_len);
   assert(err == 0);
 
-  if (tcp->write_bufs != NULL) {
-    err = js_throw_error(env, uv_err_name(UV_EBUSY), uv_strerror(UV_EBUSY));
-    assert(err == 0);
-
-    return NULL;
-  }
-
   uv_buf_t *bufs = malloc(sizeof(uv_buf_t) * bufs_len);
-  if (bufs == NULL) {
-    err = js_throw_error(env, uv_err_name(UV_ENOMEM), uv_strerror(UV_ENOMEM));
-    assert(err == 0);
-
-    return NULL;
-  }
 
   js_value_t **elements = malloc(sizeof(js_value_t *) * bufs_len);
-  if (elements == NULL) {
-    free(bufs);
-
-    err = js_throw_error(env, uv_err_name(UV_ENOMEM), uv_strerror(UV_ENOMEM));
-    assert(err == 0);
-
-    return NULL;
-  }
-
   err = js_get_array_elements(env, arr, elements, bufs_len, 0, NULL);
-  if (err != 0) {
-    free(bufs);
-    free(elements);
-    assert(err == 0);
-
-    return NULL;
-  }
+  assert(err == 0);
 
   for (uint32_t i = 0; i < bufs_len; i++) {
     js_value_t *item = elements[i];
 
     uv_buf_t *buf = &bufs[i];
     err = js_get_typedarray_info(env, item, NULL, (void **) &buf->base, (size_t *) &buf->len, NULL, NULL);
-    if (err != 0) {
-      free(bufs);
-      free(elements);
-      assert(err == 0);
-
-      return NULL;
-    }
+    assert(err == 0);
   }
 
   uv_write_t *req = &tcp->requests.write;
 
   req->data = tcp;
-  tcp->write_bufs = bufs;
 
   err = uv_write(req, (uv_stream_t *) &tcp->handle, bufs, bufs_len, bare_tcp__on_write);
 
+  free(bufs);
   free(elements);
 
   if (err < 0) {
-    free(tcp->write_bufs);
-    tcp->write_bufs = NULL;
-
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
     assert(err == 0);
   }

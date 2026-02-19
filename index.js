@@ -139,7 +139,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
         this._state &= ~constants.state.CONNECTING
 
-        if (err || !Array.isArray(addresses) || addresses.length === 0) {
+        if (err || addresses.length === 0) {
           if (!err) {
             err = new Error(`No address found for host "${host}"`)
             err.code = 'ENOTFOUND'
