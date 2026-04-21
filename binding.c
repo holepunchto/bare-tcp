@@ -84,7 +84,7 @@ bare_tcp__on_connect(uv_connect_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->exiting) return;
+  if (tcp->closing || tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -133,7 +133,7 @@ bare_tcp__on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) stream;
 
-  if (tcp->exiting) return;
+  if (tcp->closing || tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -185,7 +185,7 @@ bare_tcp__on_write(uv_write_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->exiting) return;
+  if (tcp->closing || tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -231,7 +231,7 @@ bare_tcp__on_shutdown(uv_shutdown_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->exiting) return;
+  if (tcp->closing || tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -522,6 +522,8 @@ bare_tcp_reset(js_env_t *env, js_callback_info_t *info) {
   bare_tcp_t *tcp;
   err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
   assert(err == 0);
+
+  if (tcp->closing) return NULL;
 
   tcp->resetting = true;
 

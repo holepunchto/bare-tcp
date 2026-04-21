@@ -397,7 +397,7 @@ test('should not trigger timeout by writing activity', async (t) => {
   server.close()
 })
 
-test('destroy during reset should not double-close handle', async (t) => {
+test('destroy during reset', async (t) => {
   t.plan(2)
 
   const socket = new Socket()
@@ -420,6 +420,27 @@ test('destroy during reset should not double-close handle', async (t) => {
         { address: '127.0.0.1', family: 4 },
         { address: '127.0.0.1', family: 4 }
       ])
+    }
+  })
+})
+
+test('destroy while connecting with multiple addresses', async (t) => {
+  t.plan(1)
+
+  const socket = new Socket()
+
+  socket.on('close', () => t.pass('closed'))
+
+  socket.connect({
+    port: 1,
+    host: 'test.invalid',
+    lookup(hostname, opts, cb) {
+      cb(null, [
+        { address: '127.0.0.1', family: 4 },
+        { address: '127.0.0.1', family: 4 }
+      ])
+
+      socket.destroy()
     }
   })
 })
