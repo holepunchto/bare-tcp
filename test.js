@@ -397,6 +397,33 @@ test('should not trigger timeout by writing activity', async (t) => {
   server.close()
 })
 
+test('destroy during reset should not double-close handle', async (t) => {
+  t.plan(2)
+
+  const socket = new Socket()
+
+  const reset = socket._reset.bind(socket)
+
+  socket._reset = () => {
+    t.pass('reset')
+    reset()
+    socket.destroy()
+  }
+
+  socket.on('close', () => t.pass('closed'))
+
+  socket.connect({
+    port: 1,
+    host: 'test.invalid',
+    lookup(hostname, opts, cb) {
+      cb(null, [
+        { address: '127.0.0.1', family: 4 },
+        { address: '127.0.0.1', family: 4 }
+      ])
+    }
+  })
+})
+
 test('should not trigger timeout by reading activity', async (t) => {
   const sub = t.test()
   sub.plan(1)

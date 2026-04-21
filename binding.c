@@ -287,7 +287,7 @@ bare_tcp__on_close(uv_handle_t *handle) {
   err = js_get_reference_value(env, tcp->ctx, &ctx);
   assert(err == 0);
 
-  if (tcp->resetting && !tcp->exiting) {
+  if (tcp->resetting && !tcp->exiting && !tcp->closing) {
     uv_loop_t *loop;
     err = js_get_env_loop(env, &loop);
     assert(err == 0);
@@ -369,7 +369,7 @@ bare_tcp__on_teardown(js_deferred_teardown_t *handle, void *data) {
 
   tcp->exiting = true;
 
-  if (tcp->closing) return;
+  if (tcp->closing || tcp->resetting) return;
 
   uv_close((uv_handle_t *) &tcp->handle, bare_tcp__on_close);
 }
@@ -787,6 +787,8 @@ bare_tcp_close(js_env_t *env, js_callback_info_t *info) {
   assert(err == 0);
 
   tcp->closing = true;
+
+  if (tcp->resetting) return NULL;
 
   uv_close((uv_handle_t *) &tcp->handle, bare_tcp__on_close);
 
