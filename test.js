@@ -480,7 +480,7 @@ test('close while write is inflight', async (t) => {
   t.plan(1)
 
   const server = createServer((socket) => {
-    socket.resume()
+    socket.end()
   }).listen()
 
   await waitForServer(server)
