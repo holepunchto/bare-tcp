@@ -476,6 +476,27 @@ test('should not trigger timeout by reading activity', async (t) => {
   server.close()
 })
 
+test('close while write is inflight', async (t) => {
+  t.plan(1)
+
+  const server = createServer((socket) => {
+    socket.resume()
+  }).listen()
+
+  await waitForServer(server)
+
+  const socket = createConnection(server.address().port, () => {
+    socket.write('hello')
+    socket.destroy()
+  })
+
+  socket.on('close', () => {
+    t.pass('closed')
+
+    server.close()
+  })
+})
+
 function waitForServer(server) {
   return new Promise((resolve, reject) => {
     server.on('listening', done).on('error', done)

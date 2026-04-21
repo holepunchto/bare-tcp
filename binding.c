@@ -133,7 +133,7 @@ bare_tcp__on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) stream;
 
-  if (tcp->closing || tcp->exiting) return;
+  if (tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -185,7 +185,7 @@ bare_tcp__on_write(uv_write_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->closing || tcp->exiting) return;
+  if (tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -231,7 +231,7 @@ bare_tcp__on_shutdown(uv_shutdown_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->closing || tcp->exiting) return;
+  if (tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
