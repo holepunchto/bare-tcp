@@ -406,6 +406,8 @@ exports.Socket = class TCPSocket extends Duplex {
     clearTimeout(this._timer)
 
     this._continueOpen()
+    this._continueWrite()
+    this._continueFinal()
     this._continueDestroy()
   }
 }
