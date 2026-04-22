@@ -477,9 +477,10 @@ test('should not trigger timeout by reading activity', async (t) => {
 })
 
 test('close while write is inflight', async (t) => {
-  t.plan(1)
+  t.plan(2)
 
   const server = createServer((socket) => {
+    socket.resume()
     socket.end()
   }).listen()
 
@@ -487,13 +488,13 @@ test('close while write is inflight', async (t) => {
 
   const socket = createConnection(server.address().port, () => {
     socket.write('hello')
-    socket.destroy()
+    setImmediate(() => socket.destroy())
   })
 
   socket.on('close', () => {
-    t.pass('closed')
+    t.pass('socket closed')
 
-    server.close()
+    server.close(() => t.pass('server closed'))
   })
 })
 
