@@ -10,4 +10,4 @@ declare const constants: {
   }
 }
 
-exports = constants
+export = constants
