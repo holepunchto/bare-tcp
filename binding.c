@@ -791,6 +791,8 @@ bare_tcp_close(js_env_t *env, js_callback_info_t *info) {
   err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
   assert(err == 0);
 
+  if (tcp->closing) return NULL;
+
   tcp->closing = true;
 
   if (tcp->resetting) return NULL;
