@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <bare.h>
 #include <js.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <uv.h>
 
@@ -559,6 +560,8 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
   uint32_t backlog;
   err = js_get_value_uint32(env, argv[3], &backlog);
   assert(err == 0);
+
+  if (backlog > INT_MAX) backlog = INT_MAX;
 
   uint32_t family;
   err = js_get_value_uint32(env, argv[4], &family);
