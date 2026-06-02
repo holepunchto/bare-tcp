@@ -1,6 +1,6 @@
 {
   "name": "bare-tcp",
-  "version": "2.2.13",
+  "version": "2.3.0-0",
   "description": "Native TCP sockets for JavaScript",
   "exports": {
     ".": {
@@ -45,6 +45,7 @@
     "bare-stream": "^2.6.4"
   },
   "devDependencies": {
+    "bare-pipe": "^4.1.5",
     "brittle": "^3.5.0",
     "cmake-bare": "^1.1.6",
     "lunte": "^1.6.0",

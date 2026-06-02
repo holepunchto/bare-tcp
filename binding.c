@@ -996,6 +996,41 @@ bare_tcp_unref(js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_socketpair(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  uv_os_sock_t fds[2];
+  err = uv_socketpair(SOCK_STREAM, 0, fds, UV_NONBLOCK_PIPE, UV_NONBLOCK_PIPE);
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
+    return NULL;
+  }
+
+  js_value_t *result;
+  err = js_create_array_with_length(env, 2, &result);
+  assert(err == 0);
+
+  js_value_t *first;
+  err = js_create_int64(env, fds[0], &first);
+  assert(err == 0);
+
+  js_value_t *second;
+  err = js_create_int64(env, fds[1], &second);
+  assert(err == 0);
+
+  err = js_set_element(env, result, 0, first);
+  assert(err == 0);
+
+  err = js_set_element(env, result, 1, second);
+  assert(err == 0);
+
+  return result;
+}
+
+static js_value_t *
 bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   int err;
 
@@ -1023,6 +1058,7 @@ bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   V("address", bare_tcp_address)
   V("ref", bare_tcp_ref)
   V("unref", bare_tcp_unref)
+  V("socketpair", bare_tcp_socketpair)
 #undef V
 
   return exports;

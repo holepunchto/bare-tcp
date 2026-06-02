@@ -154,6 +154,8 @@ declare function isIPv4(host: string): boolean
 
 declare function isIPv6(host: string): boolean
 
+declare function socketpair(): [first: number, second: number]
+
 export {
   type TCPSocket,
   TCPSocket as Socket,
@@ -162,6 +164,7 @@ export {
   createConnection,
   createConnection as connect,
   createServer,
+  socketpair,
   constants,
   type TCPError,
   TCPError as errors,

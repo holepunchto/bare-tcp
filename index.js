@@ -679,4 +679,8 @@ exports.createServer = function createServer(opts, onconnection) {
   return new exports.Server(opts, onconnection)
 }
 
+exports.socketpair = function socketpair() {
+  return binding.socketpair()
+}
+
 function noop() {}
