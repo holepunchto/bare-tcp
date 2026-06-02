@@ -607,6 +607,40 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_open(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 2;
+  js_value_t *argv[2];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 2);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  int32_t fd;
+  err = js_get_value_int32(env, argv[1], &fd);
+  assert(err == 0);
+
+  uv_os_sock_t sock = (uv_os_sock_t) uv_get_osfhandle(fd);
+
+  err = uv_tcp_open(&tcp->handle, sock);
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
+    return NULL;
+  }
+
+  return NULL;
+}
+
+static js_value_t *
 bare_tcp_accept(js_env_t *env, js_callback_info_t *info) {
   int err;
 
@@ -996,6 +1030,45 @@ bare_tcp_unref(js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_socketpair(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  uv_os_sock_t fds[2];
+  err = uv_socketpair(SOCK_STREAM, 0, fds, UV_NONBLOCK_PIPE, UV_NONBLOCK_PIPE);
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
+    return NULL;
+  }
+
+  int out[2];
+  out[0] = uv_open_osfhandle((uv_os_fd_t) fds[0]);
+  out[1] = uv_open_osfhandle((uv_os_fd_t) fds[1]);
+
+  js_value_t *result;
+  err = js_create_array_with_length(env, 2, &result);
+  assert(err == 0);
+
+  js_value_t *first;
+  err = js_create_int32(env, out[0], &first);
+  assert(err == 0);
+
+  js_value_t *second;
+  err = js_create_int32(env, out[1], &second);
+  assert(err == 0);
+
+  err = js_set_element(env, result, 0, first);
+  assert(err == 0);
+
+  err = js_set_element(env, result, 1, second);
+  assert(err == 0);
+
+  return result;
+}
+
+static js_value_t *
 bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   int err;
 
@@ -1012,6 +1085,7 @@ bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   V("connect", bare_tcp_connect)
   V("reset", bare_tcp_reset)
   V("bind", bare_tcp_bind)
+  V("open", bare_tcp_open)
   V("accept", bare_tcp_accept)
   V("resume", bare_tcp_resume)
   V("pause", bare_tcp_pause)
@@ -1023,6 +1097,7 @@ bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   V("address", bare_tcp_address)
   V("ref", bare_tcp_ref)
   V("unref", bare_tcp_unref)
+  V("socketpair", bare_tcp_socketpair)
 #undef V
 
   return exports;

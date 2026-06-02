@@ -57,6 +57,10 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   connect(port: number, onconnect: () => void): this
   connect(opts: TCPSocketConnectOptions): this
 
+  open(fd: number, opts?: { fd?: number }, onconnect?: () => void): this
+  open(fd: number, onconnect: () => void): this
+  open(opts: { fd: number }, onconnect?: () => void): this
+
   setKeepAlive(enable?: boolean, delay?: number): this
   setKeepAlive(delay: number): this
 
@@ -154,6 +158,8 @@ declare function isIPv4(host: string): boolean
 
 declare function isIPv6(host: string): boolean
 
+declare function socketpair(): [first: number, second: number]
+
 export {
   type TCPSocket,
   TCPSocket as Socket,
@@ -162,6 +168,7 @@ export {
   createConnection,
   createConnection as connect,
   createServer,
+  socketpair,
   constants,
   type TCPError,
   TCPError as errors,

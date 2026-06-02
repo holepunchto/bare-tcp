@@ -1,5 +1,5 @@
 const test = require('brittle')
-const { createServer, createConnection, connect, Socket } = require('.')
+const { createServer, createConnection, connect, Socket, socketpair } = require('.')
 
 test('server + client', async (t) => {
   t.plan(2)
@@ -496,6 +496,71 @@ test('close while write is inflight', async (t) => {
 
     server.close(() => t.pass('server closed'))
   })
+})
+
+test('socketpair, returns two distinct fds', (t) => {
+  t.plan(4)
+
+  const [a, b] = socketpair()
+
+  t.is(typeof a, 'number')
+  t.is(typeof b, 'number')
+  t.ok(a >= 0)
+  t.ok(b >= 0)
+
+  new Socket().open(a).destroy()
+  new Socket().open(b).destroy()
+})
+
+test('socketpair, data flow from first to second', async (t) => {
+  t.plan(1)
+
+  const [a, b] = socketpair()
+
+  const left = new Socket().open(a)
+  const right = new Socket().open(b)
+
+  right.on('data', (data) => {
+    t.alike(data, Buffer.from('hello'))
+    left.destroy()
+    right.destroy()
+  })
+
+  left.write(Buffer.from('hello'))
+})
+
+test('socketpair, bidirectional data flow', async (t) => {
+  t.plan(2)
+
+  const [a, b] = socketpair()
+
+  const left = new Socket().open(a)
+  const right = new Socket().open(b)
+
+  let leftDone = false
+  let rightDone = false
+
+  function maybeClose() {
+    if (leftDone && rightDone) {
+      left.destroy()
+      right.destroy()
+    }
+  }
+
+  left.on('data', (data) => {
+    t.alike(data, Buffer.from('from right'))
+    leftDone = true
+    maybeClose()
+  })
+
+  right.on('data', (data) => {
+    t.alike(data, Buffer.from('from left'))
+    rightDone = true
+    maybeClose()
+  })
+
+  left.write(Buffer.from('from left'))
+  right.write(Buffer.from('from right'))
 })
 
 function waitForServer(server) {
