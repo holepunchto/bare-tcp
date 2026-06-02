@@ -387,6 +387,14 @@ exports.Socket = class TCPSocket extends Duplex {
     this.emit('connect')
   }
 
+  _onaccept() {
+    this._localAddress = binding.address(this._handle, true)
+    this._remoteAddress = binding.address(this._handle, false)
+
+    this._state |= constants.state.CONNECTED
+    this._continueOpen()
+  }
+
   _onreset(err) {
     if (err) {
       this._errors.push(err)
@@ -640,10 +648,7 @@ exports.Server = class TCPServer extends EventEmitter {
     try {
       binding.accept(this._handle, socket._handle)
 
-      socket._localAddress = binding.address(socket._handle, true)
-      socket._remoteAddress = binding.address(socket._handle, false)
-
-      socket._state |= constants.state.CONNECTED
+      socket._onaccept()
 
       this._connections.add(socket)
 
