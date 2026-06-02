@@ -607,6 +607,40 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
+bare_tcp_open(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 2;
+  js_value_t *argv[2];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 2);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  int32_t fd;
+  err = js_get_value_int32(env, argv[1], &fd);
+  assert(err == 0);
+
+  uv_os_sock_t sock = (uv_os_sock_t) uv_get_osfhandle(fd);
+
+  err = uv_tcp_open(&tcp->handle, sock);
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+
+    return NULL;
+  }
+
+  return NULL;
+}
+
+static js_value_t *
 bare_tcp_accept(js_env_t *env, js_callback_info_t *info) {
   int err;
 
@@ -1051,6 +1085,7 @@ bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   V("connect", bare_tcp_connect)
   V("reset", bare_tcp_reset)
   V("bind", bare_tcp_bind)
+  V("open", bare_tcp_open)
   V("accept", bare_tcp_accept)
   V("resume", bare_tcp_resume)
   V("pause", bare_tcp_pause)

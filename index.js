@@ -198,6 +198,35 @@ exports.Socket = class TCPSocket extends Duplex {
     return this
   }
 
+  open(fd, opts = {}, onconnect) {
+    if (typeof opts === 'function') {
+      onconnect = opts
+      opts = {}
+    }
+
+    if (typeof fd === 'object' && fd !== null) {
+      opts = fd
+      fd = opts.fd
+    }
+
+    try {
+      binding.open(this._handle, fd)
+
+      this._state |= constants.state.CONNECTED
+
+      if (onconnect) this.once('connect', onconnect)
+
+      queueMicrotask(() => this.emit('connect'))
+    } catch (err) {
+      queueMicrotask(() => {
+        if (this._pendingOpen) this._pendingOpen(err)
+        else this.destroy(err)
+      })
+    }
+
+    return this
+  }
+
   setKeepAlive(enable = false, delay = 0) {
     if (typeof enable === 'number') {
       delay = enable

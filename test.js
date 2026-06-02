@@ -1,5 +1,4 @@
 const test = require('brittle')
-const Pipe = require('bare-pipe')
 const { createServer, createConnection, connect, Socket, socketpair } = require('.')
 
 test('server + client', async (t) => {
@@ -509,8 +508,8 @@ test('socketpair, returns two distinct fds', (t) => {
   t.ok(a >= 0)
   t.ok(b >= 0)
 
-  new Pipe(a).destroy()
-  new Pipe(b).destroy()
+  new Socket().open(a).destroy()
+  new Socket().open(b).destroy()
 })
 
 test('socketpair, data flow from first to second', async (t) => {
@@ -518,8 +517,8 @@ test('socketpair, data flow from first to second', async (t) => {
 
   const [a, b] = socketpair()
 
-  const left = new Pipe(a)
-  const right = new Pipe(b)
+  const left = new Socket().open(a)
+  const right = new Socket().open(b)
 
   right.on('data', (data) => {
     t.alike(data, Buffer.from('hello'))
@@ -535,8 +534,8 @@ test('socketpair, bidirectional data flow', async (t) => {
 
   const [a, b] = socketpair()
 
-  const left = new Pipe(a)
-  const right = new Pipe(b)
+  const left = new Socket().open(a)
+  const right = new Socket().open(b)
 
   let leftDone = false
   let rightDone = false
