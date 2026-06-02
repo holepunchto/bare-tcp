@@ -1009,16 +1009,20 @@ bare_tcp_socketpair(js_env_t *env, js_callback_info_t *info) {
     return NULL;
   }
 
+  int out[2];
+  out[0] = uv_open_osfhandle((uv_os_fd_t) fds[0]);
+  out[1] = uv_open_osfhandle((uv_os_fd_t) fds[1]);
+
   js_value_t *result;
   err = js_create_array_with_length(env, 2, &result);
   assert(err == 0);
 
   js_value_t *first;
-  err = js_create_int64(env, fds[0], &first);
+  err = js_create_int32(env, out[0], &first);
   assert(err == 0);
 
   js_value_t *second;
-  err = js_create_int64(env, fds[1], &second);
+  err = js_create_int32(env, out[1], &second);
   assert(err == 0);
 
   err = js_set_element(env, result, 0, first);
