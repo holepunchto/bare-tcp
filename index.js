@@ -388,8 +388,17 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onaccept() {
-    this._localAddress = binding.address(this._handle, true)
-    this._remoteAddress = binding.address(this._handle, false)
+    try {
+      this._localAddress = binding.address(this._handle, true)
+    } catch {
+      this._localAddress = null
+    }
+
+    try {
+      this._remoteAddress = binding.address(this._handle, false)
+    } catch {
+      this._remoteAddress = null
+    }
 
     this._state |= constants.state.CONNECTED
     this._continueOpen()
