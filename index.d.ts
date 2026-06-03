@@ -1,6 +1,7 @@
 import EventEmitter, { EventMap } from 'bare-events'
 import { Duplex, DuplexEvents } from 'bare-stream'
 import { IPFamily, LookupOptions } from 'bare-dns'
+import type { IPCAcceptable } from 'bare-pipe'
 import TCPError from './lib/errors'
 import constants from './lib/constants'
 
@@ -40,7 +41,7 @@ interface TCPSocketConnectOptions extends LookupOptions {
   timeout?: number
 }
 
-interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<M> {
+interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<M>, IPCAcceptable {
   readonly connecting: boolean
   readonly pending: boolean
   readonly timeout?: number

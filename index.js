@@ -9,6 +9,9 @@ const ip = require('./lib/ip')
 const defaultReadBufferSize = 65536
 const empty = Buffer.alloc(0)
 
+const ipcHandle = Symbol.for('bare.ipc.handle')
+const ipcAccept = Symbol.for('bare.ipc.accept')
+
 exports.Socket = class TCPSocket extends Duplex {
   constructor(opts = {}) {
     const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true, eagerOpen = true } = opts
@@ -402,6 +405,14 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._state |= constants.state.CONNECTED
     this._continueOpen()
+  }
+
+  get [ipcHandle]() {
+    return this._handle
+  }
+
+  [ipcAccept]() {
+    this._onaccept()
   }
 
   _onreset(err) {
