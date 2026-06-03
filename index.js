@@ -99,6 +99,10 @@ exports.Socket = class TCPSocket extends Duplex {
     if (this._remoteAddress) return this._remoteAddress.port
   }
 
+  get [ipcHandle]() {
+    return this._handle
+  }
+
   connect(port, host = 'localhost', opts = {}, onconnect) {
     if (this._state & constants.state.CONNECTING || this._state & constants.state.CONNECTED) {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
@@ -280,6 +284,10 @@ exports.Socket = class TCPSocket extends Duplex {
     return this
   }
 
+  [ipcAccept]() {
+    this._onaccept()
+  }
+
   _open(cb) {
     if (this._state & constants.state.CONNECTED) return cb(null)
 
@@ -405,14 +413,6 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._state |= constants.state.CONNECTED
     this._continueOpen()
-  }
-
-  get [ipcHandle]() {
-    return this._handle
-  }
-
-  [ipcAccept]() {
-    this._onaccept()
   }
 
   _onreset(err) {
