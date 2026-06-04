@@ -178,6 +178,45 @@ test('reject out-of-range port on listen', (t) => {
   }
 })
 
+test('maxConnections drops excess and emits drop', async (t) => {
+  t.plan(4)
+
+  const server = createServer({ maxConnections: 1, allowHalfOpen: false })
+    .on('connection', (socket) => {
+      t.pass('first connection accepted')
+      socket.resume()
+    })
+    .listen(0, '127.0.0.1')
+
+  await waitForServer(server)
+
+  const { port } = server.address()
+
+  const first = createConnection(port, '127.0.0.1', () => {
+    const second = createConnection(port, '127.0.0.1')
+    second.resume()
+    second.on('end', () => second.destroy())
+  })
+
+  const info = await new Promise((resolve) => server.once('drop', resolve))
+
+  t.is(typeof info.remotePort, 'number', 'drop info has remotePort')
+  t.is(server.connections.size, 1, 'dropped connection not tracked')
+
+  first.destroy()
+
+  await new Promise((resolve) => server.close(resolve))
+
+  t.pass('server closed')
+})
+
+test('maxConnections is mutable at runtime', (t) => {
+  const server = createServer()
+  t.is(server.maxConnections, Infinity, 'defaults to Infinity')
+  server.maxConnections = 10
+  t.is(server.maxConnections, 10, 'settable')
+})
+
 test('reject out-of-range port in opts', (t) => {
   t.exception(() => new Socket().connect({ port: 65536, host: '127.0.0.1' }), /INVALID_PORT/)
   t.exception(() => createServer().listen({ port: 65536 }), /INVALID_PORT/)
