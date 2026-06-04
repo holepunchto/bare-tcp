@@ -484,7 +484,8 @@ exports.Server = class TCPServer extends EventEmitter {
       keepAlive = false,
       keepAliveInitialDelay = 0,
       noDelay = false,
-      pauseOnConnect = false
+      pauseOnConnect = false,
+      maxConnections = Infinity
     } = opts
 
     this._state = 0
@@ -495,6 +496,7 @@ exports.Server = class TCPServer extends EventEmitter {
     this._keepAliveInitialDelay = keepAliveInitialDelay
     this._noDelay = noDelay
     this._pauseOnConnect = pauseOnConnect
+    this._maxConnections = maxConnections
 
     this._address = null
     this._connections = new Set()
@@ -515,6 +517,14 @@ exports.Server = class TCPServer extends EventEmitter {
 
   get connections() {
     return this._connections
+  }
+
+  get maxConnections() {
+    return this._maxConnections
+  }
+
+  set maxConnections(value) {
+    this._maxConnections = value
   }
 
   address() {
@@ -663,8 +673,10 @@ exports.Server = class TCPServer extends EventEmitter {
 
     if (this._state & constants.state.CLOSING) return
 
+    const overLimit = this._connections.size >= this._maxConnections
+
     const socket = new exports.Socket({
-      readBufferSize: this._readBufferSize,
+      readBufferSize: overLimit ? 0 : this._readBufferSize,
       allowHalfOpen: this._allowHalfOpen,
       eagerOpen: !this._pauseOnConnect
     })
@@ -673,6 +685,22 @@ exports.Server = class TCPServer extends EventEmitter {
       binding.accept(this._handle, socket._handle)
 
       socket._onaccept()
+
+      if (overLimit) {
+        const info = {
+          localAddress: socket.localAddress,
+          localPort: socket.localPort,
+          localFamily: socket.localFamily,
+          remoteAddress: socket.remoteAddress,
+          remotePort: socket.remotePort,
+          remoteFamily: socket.remoteFamily
+        }
+
+        socket.destroy()
+
+        this.emit('drop', info)
+        return
+      }
 
       this._connections.add(socket)
 

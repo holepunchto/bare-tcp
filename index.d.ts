@@ -77,9 +77,19 @@ declare class TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Dup
   constructor(opts?: TCPSocketOptions)
 }
 
+interface TCPServerDropInfo {
+  localAddress?: string
+  localPort?: number
+  localFamily?: string
+  remoteAddress?: string
+  remotePort?: number
+  remoteFamily?: string
+}
+
 interface TCPServerEvents extends EventMap {
   close: []
   connection: [socket: TCPSocket]
+  drop: [info: TCPServerDropInfo]
   error: [err: Error]
   listening: []
   lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
@@ -89,6 +99,7 @@ interface TCPServerOptions {
   allowHalfOpen?: number
   keepAlive?: boolean
   keepAliveInitialDelay?: boolean
+  maxConnections?: number
   noDelay?: boolean
   pauseOnConnect?: boolean
   readBufferSize?: number
@@ -105,6 +116,7 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
   readonly listening: boolean
   readonly closing: boolean
   readonly connections: Set<TCPSocket>
+  maxConnections: number
 
   address(): TCPSocketAddress
 
@@ -181,6 +193,7 @@ export {
   type TCPSocketEvents,
   type TCPSocketOptions,
   type TCPSocketConnectOptions,
+  type TCPServerDropInfo,
   type TCPServerEvents,
   type TCPServerOptions,
   type TCPServerListenOptions
