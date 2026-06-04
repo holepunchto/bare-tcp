@@ -158,6 +158,31 @@ test('not accept address request when not listening', (t) => {
   t.is(server.address(), null)
 })
 
+test('reject out-of-range port on connect', (t) => {
+  const cases = [-1, 65536, 75535, 1.5, NaN, Infinity, 'foo', null, undefined]
+
+  for (const port of cases) {
+    t.exception(
+      () => new Socket().connect(port, '127.0.0.1'),
+      /INVALID_PORT/,
+      `connect(${String(port)})`
+    )
+  }
+})
+
+test('reject out-of-range port on listen', (t) => {
+  const cases = [-1, 65536, 75535, 1.5, NaN, Infinity, 'foo']
+
+  for (const port of cases) {
+    t.exception(() => createServer().listen(port), /INVALID_PORT/, `listen(${String(port)})`)
+  }
+})
+
+test('reject out-of-range port in opts', (t) => {
+  t.exception(() => new Socket().connect({ port: 65536, host: '127.0.0.1' }), /INVALID_PORT/)
+  t.exception(() => createServer().listen({ port: 65536 }), /INVALID_PORT/)
+})
+
 test('not accept server calling listen method twice', async (t) => {
   t.plan(1)
 
