@@ -108,8 +108,6 @@ exports.Socket = class TCPSocket extends Duplex {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
     }
 
-    this._state |= constants.state.CONNECTING
-
     if (typeof host === 'function') {
       onconnect = host
       host = 'localhost'
@@ -128,6 +126,10 @@ exports.Socket = class TCPSocket extends Duplex {
     }
 
     if (!host) host = 'localhost'
+
+    validatePort(port)
+
+    this._state |= constants.state.CONNECTING
 
     const {
       lookup = dns.lookup,
@@ -532,8 +534,6 @@ exports.Server = class TCPServer extends EventEmitter {
       throw errors.SERVER_IS_CLOSED('Server is closed')
     }
 
-    this._state |= constants.state.BINDING
-
     if (typeof port === 'function') {
       onlistening = port
       port = 0
@@ -560,6 +560,10 @@ exports.Server = class TCPServer extends EventEmitter {
 
     if (!host) host = 'localhost'
     if (!backlog) backlog = 511
+
+    validatePort(port)
+
+    this._state |= constants.state.BINDING
 
     const { lookup = dns.lookup, hints } = opts
 
@@ -735,6 +739,12 @@ exports.createServer = function createServer(opts, onconnection) {
 
 exports.socketpair = function socketpair() {
   return binding.socketpair()
+}
+
+function validatePort(port) {
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 0 || port > 0xffff) {
+    throw errors.INVALID_PORT(`Port must be an integer between 0 and 65535, got ${port}`)
+  }
 }
 
 function noop() {}
