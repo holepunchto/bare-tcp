@@ -31,6 +31,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._pendingOpen = null
     this._pendingWrite = null
+    this._pendingWriteBatch = null
     this._pendingFinal = null
     this._pendingDestroy = null
 
@@ -305,7 +306,8 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _writev(batch, cb) {
-    this._pendingWrite = [cb, batch]
+    this._pendingWrite = cb
+    this._pendingWriteBatch = batch
 
     binding.writev(
       this._handle,
@@ -344,8 +346,9 @@ exports.Socket = class TCPSocket extends Duplex {
 
   _continueWrite(err) {
     if (this._pendingWrite === null) return
-    const cb = this._pendingWrite[0]
+    const cb = this._pendingWrite
     this._pendingWrite = null
+    this._pendingWriteBatch = null
     cb(err)
   }
 
