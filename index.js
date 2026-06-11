@@ -309,10 +309,14 @@ exports.Socket = class TCPSocket extends Duplex {
     this._pendingWrite = cb
     this._pendingWriteBatch = batch
 
-    binding.writev(
-      this._handle,
-      batch.map(({ chunk }) => chunk)
-    )
+    try {
+      binding.writev(
+        this._handle,
+        batch.map(({ chunk }) => chunk)
+      )
+    } catch (err) {
+      this._continueWrite(err)
+    }
   }
 
   _final(cb) {
