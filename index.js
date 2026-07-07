@@ -777,7 +777,11 @@ exports.socketpair = function socketpair() {
 }
 
 function validatePort(port) {
-  if (typeof port !== 'number' || !Number.isInteger(port) || port < 0 || port > 0xffff) {
+  if (typeof port !== 'number') {
+    throw errors.INVALID_PORT(`Port must be a number, got ${typeof port}`)
+  }
+
+  if (!Number.isInteger(port) || port < 0 || port > 0xffff) {
     throw errors.INVALID_PORT(`Port must be an integer between 0 and 65535, got ${port}`)
   }
 }
