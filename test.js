@@ -637,6 +637,23 @@ test('socketpair, bidirectional data flow', async (t) => {
   right.write(Buffer.from('from right'))
 })
 
+test('server, listening is false after close', async (t) => {
+  t.plan(3)
+
+  const server = createServer()
+
+  server.listen(0)
+
+  await waitForServer(server)
+
+  t.ok(server.listening, 'listening while bound')
+
+  server.close(() => {
+    t.absent(server.listening, 'not listening after close')
+    t.is(server.address(), null, 'no address after close')
+  })
+})
+
 function waitForServer(server) {
   return new Promise((resolve, reject) => {
     server.on('listening', done).on('error', done)
