@@ -199,6 +199,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
+      this._state &= ~constants.state.CONNECTING
+
       queueMicrotask(() => {
         if (this._pendingOpen) this._pendingOpen(err)
         else this.destroy(err)
@@ -388,6 +390,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
         err = this._errors.length === 1 ? this._errors[0] : new AggregateError(this._errors)
       }
+
+      this._state &= ~constants.state.CONNECTING
 
       if (this._pendingOpen) this._continueOpen(err)
       else this.destroy(err)

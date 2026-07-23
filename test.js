@@ -79,6 +79,16 @@ test('socket state getters', async (t) => {
   server.close()
 })
 
+test('socket, connecting is false after failed connect', async (t) => {
+  const socket = new Socket()
+  socket.on('error', () => {})
+  socket.connect(1, '127.0.0.1')
+
+  await new Promise((resolve) => socket.on('close', resolve))
+
+  t.absent(socket.connecting, 'not connecting after failed connect')
+})
+
 test('address getters', async (t) => {
   t.plan(14)
 
