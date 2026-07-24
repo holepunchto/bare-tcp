@@ -181,6 +181,8 @@ options = {
 
 Close the server. No new connections will be accepted. The server emits `close` after all existing connections have ended.
 
+A connection accepted with `allowHalfOpen: true` stays open after the peer closes its end: the peer's `FIN` ends only the readable half, and the writable half remains open until the local side ends it. Such a connection has not "ended", so it keeps the server open and `close` will not fire until you end it (for example `socket.on('end', () => socket.end())`). This matches Node's `net`, which also waits for half-open connections to end.
+
 #### `server.ref()`
 
 Ref the server, preventing the process from exiting.
