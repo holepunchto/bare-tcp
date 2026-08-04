@@ -381,6 +381,20 @@ exports.Socket = class TCPSocket extends Duplex {
     binding.reset(this._handle)
   }
 
+  _updateAddresses() {
+    try {
+      this._localAddress = binding.address(this._handle, true)
+    } catch {
+      this._localAddress = null
+    }
+
+    try {
+      this._remoteAddress = binding.address(this._handle, false)
+    } catch {
+      this._remoteAddress = null
+    }
+  }
+
   _onconnect(err) {
     if (err) {
       if (this._addresses !== null) {
@@ -401,8 +415,7 @@ exports.Socket = class TCPSocket extends Duplex {
     if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
     if (this._noDelay) this.setNoDelay()
 
-    this._localAddress = binding.address(this._handle, true)
-    this._remoteAddress = binding.address(this._handle, false)
+    this._updateAddresses()
 
     this._state |= constants.state.CONNECTED
     this._state &= ~constants.state.CONNECTING
@@ -412,17 +425,7 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onaccept() {
-    try {
-      this._localAddress = binding.address(this._handle, true)
-    } catch {
-      this._localAddress = null
-    }
-
-    try {
-      this._remoteAddress = binding.address(this._handle, false)
-    } catch {
-      this._remoteAddress = null
-    }
+    this._updateAddresses()
 
     this._state |= constants.state.CONNECTED
     this._continueOpen()
