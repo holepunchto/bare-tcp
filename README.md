@@ -20,220 +20,471 @@ const socket = tcp.createConnection(port)
 socket.write('hello world')
 ```
 
+<!-- bare-refgen:api start -->
+
 ## API
 
-#### `const socket = new tcp.Socket([options])`
+### TCPSocket
+
+#### `new TCPSocket(opts?: TCPSocketOptions)`
 
 Create a new TCP socket.
 
-Options include:
+**Parameters**
 
-```js
-options = {
-  readBufferSize: 65536,
-  allowHalfOpen: true,
-  eagerOpen: true
-}
+| Parameter | Type               | Default | Description                                                                                   |
+| --------- | ------------------ | ------- | --------------------------------------------------------------------------------------------- |
+| `opts?`   | `TCPSocketOptions` | —       | Options; `readBufferSize` defaults to `65536`, and `allowHalfOpen` and `eagerOpen` to `true`. |
+
+#### `connect`
+
+```ts
+connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
 ```
-
-#### `socket.connecting`
-
-Whether the socket is currently connecting.
-
-#### `socket.pending`
-
-Whether the socket has not yet connected.
-
-#### `socket.timeout`
-
-The timeout in milliseconds, or `undefined` if no timeout is set.
-
-#### `socket.readyState`
-
-The current state of the socket. Either `'open'` or `'opening'`.
-
-#### `socket.localAddress`
-
-The local IP address of the socket, if connected.
-
-#### `socket.localFamily`
-
-The local IP family (`'IPv4'` or `'IPv6'`), if connected.
-
-#### `socket.localPort`
-
-The local port of the socket, if connected.
-
-#### `socket.remoteAddress`
-
-The remote IP address of the socket, if connected.
-
-#### `socket.remoteFamily`
-
-The remote IP family (`'IPv4'` or `'IPv6'`), if connected.
-
-#### `socket.remotePort`
-
-The remote port of the socket, if connected.
-
-#### `socket.connect(port[, host[, options]][, onconnect])`
 
 Connect the socket to `port` on `host`. If `host` is not provided, it defaults to `'localhost'`. `onconnect` is called when the connection is established.
 
-Options include:
+**Parameters**
 
-```js
-options = {
-  lookup: dns.lookup,
-  hints: null,
-  family: 0,
-  keepAlive: false,
-  keepAliveInitialDelay: 0,
-  noDelay: false,
-  timeout: null
-}
+| Parameter    | Type                      | Default | Description                                                                                                                    |
+| ------------ | ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `port`       | `number`                  | —       | The port to connect to.                                                                                                        |
+| `host?`      | `string`                  | —       | The host to connect to; defaults to `'localhost'`.                                                                             |
+| `opts?`      | `TCPSocketConnectOptions` | —       | Connection options; if `host` is a hostname it is resolved with `opts.lookup`, which defaults to `dns.lookup` from `bare-dns`. |
+| `onconnect?` | `() => void`              | —       | Called when the connection is established.                                                                                     |
+
+**Throws**
+
+- `SOCKET_ALREADY_CONNECTED` — the socket is already connecting or connected.
+- `INVALID_PORT` — `port` is not an integer between 0 and 65535.
+
+#### `connecting: boolean`
+
+Whether the socket is currently connecting.
+
+#### `localAddress: string`
+
+The local IP address of the socket, if connected.
+
+#### `localFamily: string`
+
+The local IP family (`'IPv4'` or `'IPv6'`), if connected.
+
+#### `localPort: number`
+
+The local port of the socket, if connected.
+
+#### `open(fd: number, opts?: { fd?: number }, onconnect?: () => void): this`
+
+Open the socket on the file descriptor of an existing TCP connection, emitting `'connect'` once open.
+
+Overloads:
+
+```ts
+open(fd: number, opts?: { fd?: number }, onconnect?: () => void): this
+open(fd: number, onconnect: () => void): this
+open(opts: { fd: number }, onconnect?: () => void): this
 ```
 
-If `host` is a hostname, `options.lookup` is used to resolve it. By default, <https://github.com/holepunchto/bare-dns> is used. Set `options.family` to `4` or `6` to restrict the lookup to IPv4 or IPv6.
+**Parameters**
 
-#### `socket.setKeepAlive([enable][, delay])`
+| Parameter    | Type              | Default | Description                                                              |
+| ------------ | ----------------- | ------- | ------------------------------------------------------------------------ |
+| `fd`         | `number`          | —       | The file descriptor of an existing TCP connection to open the socket on. |
+| `opts?`      | `{ fd?: number }` | —       | `fd` may be given here instead of as the first argument.                 |
+| `onconnect?` | `() => void`      | —       | Called once when the socket emits `'connect'`.                           |
 
-Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first keep-alive probe is sent.
+#### `pending: boolean`
 
-#### `socket.setNoDelay([enable])`
+Whether the socket has not yet connected.
 
-Enable or disable Nagle's algorithm. When `enable` is `true` (the default), data is sent immediately without buffering.
+#### `readyState: 'open' | 'opening'`
 
-#### `socket.setTimeout(ms[, ontimeout])`
+The current state of the socket. Either `'open'` or `'opening'`.
 
-Set a timeout in milliseconds. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout.
-
-#### `socket.ref()`
+#### `TCPSocket.ref(): this`
 
 Ref the socket, preventing the process from exiting.
 
-#### `socket.unref()`
+#### `remoteAddress: string`
+
+The remote IP address of the socket, if connected.
+
+#### `remoteFamily: string`
+
+The remote IP family (`'IPv4'` or `'IPv6'`), if connected.
+
+#### `remotePort: number`
+
+The remote port of the socket, if connected.
+
+#### `setKeepAlive(enable?: boolean, delay?: number): this`
+
+Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first keep-alive probe is sent.
+
+Overloads:
+
+```ts
+setKeepAlive(enable?: boolean, delay?: number): this
+setKeepAlive(delay: number): this
+```
+
+**Parameters**
+
+| Parameter | Type      | Default | Description                                                                  |
+| --------- | --------- | ------- | ---------------------------------------------------------------------------- |
+| `enable?` | `boolean` | —       | Whether to enable keep-alive.                                                |
+| `delay?`  | `number`  | —       | The initial delay in milliseconds before the first keep-alive probe is sent. |
+
+#### `setNoDelay(enable?: boolean): this`
+
+Enable or disable Nagle's algorithm. When `enable` is `true` (the default), data is sent immediately without buffering.
+
+**Parameters**
+
+| Parameter | Type      | Default | Description                                                            |
+| --------- | --------- | ------- | ---------------------------------------------------------------------- |
+| `enable?` | `boolean` | —       | When `true` (the default), data is sent immediately without buffering. |
+
+#### `setTimeout(ms: number, ontimeout?: () => void): this`
+
+Set a timeout in milliseconds. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout.
+
+**Parameters**
+
+| Parameter    | Type         | Default | Description                                                              |
+| ------------ | ------------ | ------- | ------------------------------------------------------------------------ |
+| `ms`         | `number`     | —       | The inactivity timeout in milliseconds; pass `0` to disable the timeout. |
+| `ontimeout?` | `() => void` | —       | Called once when the socket emits `'timeout'`.                           |
+
+#### `timeout: number`
+
+The timeout in milliseconds, or `undefined` if no timeout is set.
+
+#### `TCPSocket.unref(): this`
 
 Unref the socket, allowing the process to exit.
 
-#### `event: 'connect'`
+### TCPServer
 
-Emitted when the socket connects.
+#### `new TCPServer(opts?: TCPServerOptions, onconnection?: () => void)`
 
-#### `event: 'lookup'`
+Create a new TCP server. If `onconnection` is provided, it is added as a listener for the `connection` event.
 
-Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
+Overloads:
 
-#### `event: 'timeout'`
-
-Emitted when the socket times out due to inactivity.
-
-#### `const server = tcp.createServer([options][, onconnection])`
-
-Create a new TCP server. `server` extends <https://github.com/holepunchto/bare-events>.
-
-Options include:
-
-```js
-options = {
-  readBufferSize: 65536,
-  allowHalfOpen: true,
-  keepAlive: false,
-  keepAliveInitialDelay: 0,
-  noDelay: false,
-  pauseOnConnect: false
-}
+```ts
+new TCPServer(opts?: TCPServerOptions, onconnection?: () => void)
+new TCPServer(onconnection: () => void)
 ```
 
-These options are applied to each incoming socket. If `onconnection` is provided, it is added as a listener for the `connection` event.
+**Parameters**
 
-#### `server.listening`
+| Parameter       | Type               | Default | Description                                                                                                                                                            |
+| --------------- | ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `opts?`         | `TCPServerOptions` | —       | Options applied to each incoming socket; `readBufferSize` defaults to `65536`, `allowHalfOpen` to `true`, and `keepAlive`, `noDelay`, and `pauseOnConnect` to `false`. |
+| `onconnection?` | `() => void`       | —       | Called on each `'connection'` event.                                                                                                                                   |
 
-Whether the server is listening.
+#### `address(): TCPSocketAddress`
 
-#### `server.closing`
+**Returns** `TCPSocketAddress` — The bound address as `{ address, family, port }`, or `null` if the server is not listening.
 
-Whether the server is closing.
-
-#### `server.connections`
-
-A `Set` of active connections.
-
-#### `server.address()`
-
-Returns the bound address as `{ address, family, port }`, or `null` if the server is not listening.
-
-#### `server.listen([port[, host[, backlog[, options]]]][, onlistening])`
-
-Start listening for connections on `port` and `host`. If `port` is `0`, an available port is assigned. If `host` is not provided, it defaults to `'localhost'`. `backlog` defaults to `511`.
-
-Options include:
-
-```js
-options = {
-  lookup: dns.lookup,
-  hints: null,
-  family: 0
-}
-```
-
-#### `server.close([onclose])`
+#### `close(onclose?: (err?: Error) => void): this`
 
 Close the server. No new connections will be accepted. The server emits `close` after all existing connections have ended.
 
-A connection accepted with `allowHalfOpen: true` stays open after the peer closes its end: the peer's `FIN` ends only the readable half, and the writable half remains open until the local side ends it. Such a connection has not "ended", so it keeps the server open and `close` will not fire until you end it (for example `socket.on('end', () => socket.end())`). This matches Node's `net`, which also waits for half-open connections to end.
+**Parameters**
 
-#### `server.ref()`
+| Parameter  | Type                    | Default | Description                                                                             |
+| ---------- | ----------------------- | ------- | --------------------------------------------------------------------------------------- |
+| `onclose?` | `(err?: Error) => void` | —       | Called once when the server emits `'close'`, after all existing connections have ended. |
+
+#### `closing: boolean`
+
+Whether the server is closing.
+
+#### `connections: Set<TCPSocket>`
+
+A `Set` of active connections.
+
+#### `listen`
+
+```ts
+listen(port?: number, host?: string, backlog?: number, opts?: TCPServerListenOptions, onlistening?: () => void): this
+```
+
+Start listening for connections on `port` and `host`. If `port` is `0`, an available port is assigned. If `host` is not provided, it defaults to `'localhost'`. `backlog` defaults to `511`.
+
+**Parameters**
+
+| Parameter      | Type                     | Default | Description                                                                                                                                    |
+| -------------- | ------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `port?`        | `number`                 | —       | The port to listen on; if `0` (the default), an available port is assigned.                                                                    |
+| `host?`        | `string`                 | —       | The host to listen on; defaults to `'localhost'`.                                                                                              |
+| `backlog?`     | `number`                 | —       | The maximum length of the queue of pending connections (default `511`).                                                                        |
+| `opts?`        | `TCPServerListenOptions` | —       | Listen options; the positional arguments may be given here instead, and `lookup` (default `dns.lookup`) resolves `host` when it is a hostname. |
+| `onlistening?` | `() => void`             | —       | Called once when the server emits `'listening'`.                                                                                               |
+
+**Throws**
+
+- `SERVER_ALREADY_LISTENING` — the server is already listening.
+- `SERVER_IS_CLOSED` — the server has been closed.
+- `INVALID_PORT` — `port` is not an integer between 0 and 65535.
+
+#### `listening: boolean`
+
+Whether the server is listening.
+
+#### `maxConnections: number`
+
+The maximum number of concurrent connections; connections beyond it are destroyed and reported via the `'drop'` event. Defaults to `Infinity`.
+
+#### `TCPServer.ref(): this`
 
 Ref the server, preventing the process from exiting.
 
-#### `server.unref()`
+#### `TCPServer.unref(): this`
 
 Unref the server, allowing the process to exit.
 
-#### `event: 'listening'`
+### Functions
 
-Emitted when the server starts listening.
+#### `createConnection`
 
-#### `event: 'connection'`
-
-Emitted when a new connection is received. The argument is a `TCPSocket`.
-
-#### `event: 'close'`
-
-Emitted when the server closes.
-
-#### `event: 'error'`
-
-Emitted when an error occurs.
-
-#### `event: 'lookup'`
-
-Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
-
-#### `const socket = tcp.createConnection(port[, host[, options]][, onconnect])`
+```ts
+createConnection(port: number, host?: string, opts?: TCPSocketOptions & TCPSocketConnectOptions, onconnect?: () => void): TCPSocket
+```
 
 Create a new socket and connect it to `port` on `host`. Shorthand for `new tcp.Socket(options).connect(port, host, options, onconnect)`.
 
-#### `tcp.isIP(host)`
+**Parameters**
+
+| Parameter    | Type                                         | Default | Description                                                         |
+| ------------ | -------------------------------------------- | ------- | ------------------------------------------------------------------- |
+| `port`       | `number`                                     | —       | The port to connect to.                                             |
+| `host?`      | `string`                                     | —       | The host to connect to; defaults to `'localhost'`.                  |
+| `opts?`      | `TCPSocketOptions & TCPSocketConnectOptions` | —       | Options passed to both the `TCPSocket` constructor and `connect()`. |
+| `onconnect?` | `() => void`                                 | —       | Called when the connection is established.                          |
+
+#### `createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer`
+
+Create a new TCP server. `server` extends <https://github.com/holepunchto/bare-events>.
+
+Overloads:
+
+```ts
+createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
+createServer(onconnection: () => void): TCPServer
+```
+
+**Parameters**
+
+| Parameter       | Type               | Default | Description                                                                                                                                                            |
+| --------------- | ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `opts?`         | `TCPServerOptions` | —       | Options applied to each incoming socket; `readBufferSize` defaults to `65536`, `allowHalfOpen` to `true`, and `keepAlive`, `noDelay`, and `pauseOnConnect` to `false`. |
+| `onconnection?` | `() => void`       | —       | Called on each `'connection'` event.                                                                                                                                   |
+
+#### `socketpair(): [first: number, second: number]`
+
+Create a pair of connected sockets, returning their file descriptors.
+
+**Returns** `[first: number, second: number]` — The file descriptors of the two connected sockets.
+
+#### `isIP(host: string): IPFamily | 0`
 
 Returns `4` if `host` is an IPv4 address, `6` if it is an IPv6 address, or `0` otherwise.
 
-#### `tcp.isIPv4(host)`
+**Parameters**
+
+| Parameter | Type     | Default | Description          |
+| --------- | -------- | ------- | -------------------- |
+| `host`    | `string` | —       | The string to check. |
+
+#### `isIPv4(host: string): boolean`
 
 Returns `true` if `host` is an IPv4 address.
 
-#### `tcp.isIPv6(host)`
+**Parameters**
+
+| Parameter | Type     | Default | Description          |
+| --------- | -------- | ------- | -------------------- |
+| `host`    | `string` | —       | The string to check. |
+
+#### `isIPv6(host: string): boolean`
 
 Returns `true` if `host` is an IPv6 address.
 
-#### `tcp.constants`
+**Parameters**
+
+| Parameter | Type     | Default | Description          |
+| --------- | -------- | ------- | -------------------- |
+| `host`    | `string` | —       | The string to check. |
+
+### Constants and variables
+
+#### `constants`
+
+```ts
+constants: {
+  state: {
+    CONNECTING: number
+    CONNECTED: number
+    BINDING: number
+    BOUND: number
+    READING: number
+    CLOSING: number
+    UNREFED: number
+  }
+}
+```
 
 Object containing internal state constants.
 
-#### `tcp.errors`
+### Types
 
-Class for TCP-specific errors.
+#### `IPFamily`
+
+```ts
+type IPFamily = 4 | 6
+```
+
+#### `TCPSocketAddress`
+
+```ts
+interface TCPSocketAddress {
+  address: string
+  family: `IPv${IPFamily}`
+  port: number
+}
+```
+
+The address of a TCP socket, as `{ address, family, port }`.
+
+#### `TCPSocketEvents`
+
+```ts
+interface TCPSocketEvents {
+  connect: []
+  lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
+  timeout: [ms: number]
+  data: [data: unknown]
+  end: []
+  readable: []
+  piping: [dest: Writable]
+  close: []
+  error: [err: Error]
+  drain: []
+  finish: []
+  pipe: [src: Readable]
+}
+```
+
+Events emitted by a `TCPSocket`.
+
+#### `TCPSocketOptions`
+
+```ts
+interface TCPSocketOptions {
+  allowHalfOpen?: boolean
+  eagerOpen?: boolean
+  readBufferSize?: number
+}
+```
+
+Options for a `TCPSocket`.
+
+#### `TCPSocketConnectOptions`
+
+```ts
+interface TCPSocketConnectOptions {
+  lookup?: DNSLookup
+  host?: string
+  keepAlive?: boolean
+  keepAliveInitialDelay?: boolean
+  noDelay?: boolean
+  port?: number
+  timeout?: number
+  family?: `IPv${IPFamily}` | IPFamily | 0
+  hints?: number
+  all?: boolean
+}
+```
+
+Options for `connect()`.
+
+#### `TCPServerDropInfo`
+
+```ts
+interface TCPServerDropInfo {
+  localAddress?: string
+  localPort?: number
+  localFamily?: string
+  remoteAddress?: string
+  remotePort?: number
+  remoteFamily?: string
+}
+```
+
+Details of a connection dropped because `maxConnections` was exceeded.
+
+#### `TCPServerEvents`
+
+```ts
+interface TCPServerEvents {
+  close: []
+  connection: [socket: TCPSocket]
+  drop: [info: TCPServerDropInfo]
+  error: [err: Error]
+  listening: []
+  lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
+}
+```
+
+Events emitted by a `TCPServer`.
+
+#### `TCPServerOptions`
+
+```ts
+interface TCPServerOptions {
+  allowHalfOpen?: number
+  keepAlive?: boolean
+  keepAliveInitialDelay?: boolean
+  maxConnections?: number
+  noDelay?: boolean
+  pauseOnConnect?: boolean
+  readBufferSize?: number
+}
+```
+
+Options for a TCP server, applied to each incoming socket.
+
+#### `TCPServerListenOptions`
+
+```ts
+interface TCPServerListenOptions {
+  lookup?: DNSLookup
+  backlog?: number
+  host?: string
+  port?: number
+  family?: `IPv${IPFamily}` | IPFamily | 0
+  hints?: number
+  all?: boolean
+}
+```
+
+Options for `listen()`.
+
+### Classes
+
+#### `TCPError`
+
+```ts
+class TCPError {
+  code: string
+}
+```
+
+<!-- bare-refgen:api end -->
 
 ## License
 
