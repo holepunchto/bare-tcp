@@ -22,7 +22,7 @@ socket.write('hello world')
 
 ## API
 
-See the [full API reference](https://docs.pears.com/reference/bare/modules/bare-tcp).
+See the [`bare-tcp` reference](https://docs.pears.com/reference/bare/modules/bare-tcp).
 
 ## License
 
