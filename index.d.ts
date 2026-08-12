@@ -27,7 +27,9 @@ interface TCPSocketAddress {
 interface TCPSocketEvents extends DuplexEvents {
   /** Emitted when the socket connects. */
   connect: []
-  /** Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`. */
+  /**
+   * Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
+   */
   lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
   /** Emitted when the socket times out due to inactivity. */
   timeout: [ms: number]
@@ -51,7 +53,9 @@ interface TCPSocketConnectOptions extends LookupOptions {
   host?: string
   /** Enable keep-alive on the socket once connected. Defaults to `false`. */
   keepAlive?: boolean
-  /** The initial delay in milliseconds before the first keep-alive probe is sent. Defaults to `0`. */
+  /**
+   * The initial delay in milliseconds before the first keep-alive probe is sent. Defaults to `0`.
+   */
   keepAliveInitialDelay?: boolean
   /** Send data immediately without buffering, disabling Nagle's algorithm. Defaults to `false`. */
   noDelay?: boolean
@@ -84,10 +88,12 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly remotePort?: number
 
   /**
-   * Connect the socket to `port` on `host`. If `host` is not provided, it defaults to `'localhost'`. `onconnect` is called when the connection is established.
+   * Connect the socket to `port` on `host`. If `host` is not provided, it defaults to
+   * `'localhost'`. `onconnect` is called when the connection is established.
    * @param port - The port to connect to.
    * @param host - The host to connect to; defaults to `'localhost'`.
-   * @param opts - Connection options; if `host` is a hostname it is resolved with `opts.lookup`, which defaults to `dns.lookup` from `bare-dns`.
+   * @param opts - Connection options; if `host` is a hostname it is resolved with `opts.lookup`,
+   * which defaults to `dns.lookup` from `bare-dns`.
    * @param onconnect - Called when the connection is established.
    * @throws {SOCKET_ALREADY_CONNECTED} the socket is already connecting or connected.
    * @throws {INVALID_PORT} `port` is not an integer between 0 and 65535.
@@ -98,7 +104,8 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   connect(opts: TCPSocketConnectOptions): this
 
   /**
-   * Open the socket on the file descriptor of an existing TCP connection, emitting `'connect'` once open.
+   * Open the socket on the file descriptor of an existing TCP connection, emitting `'connect'` once
+   * open.
    * @param fd - The file descriptor of an existing TCP connection to open the socket on.
    * @param opts - `fd` may be given here instead of as the first argument.
    * @param onconnect - Called once when the socket emits `'connect'`.
@@ -107,14 +114,23 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   open(fd: number, onconnect: () => void): this
   open(opts: { fd: number }, onconnect?: () => void): this
 
-  /** Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first keep-alive probe is sent. */
+  /**
+   * Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first
+   * keep-alive probe is sent.
+   */
   setKeepAlive(enable?: boolean, delay?: number): this
   setKeepAlive(delay: number): this
 
-  /** Enable or disable Nagle's algorithm. When `enable` is `true` (the default), data is sent immediately without buffering. */
+  /**
+   * Enable or disable Nagle's algorithm. When `enable` is `true` (the default), data is sent
+   * immediately without buffering.
+   */
   setNoDelay(enable?: boolean): this
 
-  /** Set a timeout in milliseconds. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout. */
+  /**
+   * Set a timeout in milliseconds. When the socket is idle for `ms` milliseconds, a `timeout` event
+   * is emitted. Pass `0` to disable the timeout.
+   */
   setTimeout(ms: number, ontimeout?: () => void): this
 
   /** Ref the socket, preventing the process from exiting. */
@@ -150,29 +166,47 @@ interface TCPServerEvents extends EventMap {
   close: []
   /** Emitted when a new connection is received. The argument is a `TCPSocket`. */
   connection: [socket: TCPSocket]
-  /** Emitted when an incoming connection is dropped because `maxConnections` was exceeded, with details of the dropped connection. */
+  /**
+   * Emitted when an incoming connection is dropped because `maxConnections` was exceeded, with
+   * details of the dropped connection.
+   */
   drop: [info: TCPServerDropInfo]
   /** Emitted when an error occurs. */
   error: [err: Error]
   /** Emitted when the server starts listening. */
   listening: []
-  /** Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`. */
+  /**
+   * Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
+   */
   lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
 }
 
 /** Options for a TCP server, applied to each incoming socket. */
 interface TCPServerOptions {
-  /** Keep the writable side of each incoming socket open after the readable side ends. Defaults to `true`. */
+  /**
+   * Keep the writable side of each incoming socket open after the readable side ends. Defaults to
+   * `true`.
+   */
   allowHalfOpen?: number
   /** Enable keep-alive on each incoming socket. Defaults to `false`. */
   keepAlive?: boolean
-  /** The initial delay in milliseconds before the first keep-alive probe is sent. Defaults to `0`. */
+  /**
+   * The initial delay in milliseconds before the first keep-alive probe is sent. Defaults to `0`.
+   */
   keepAliveInitialDelay?: boolean
-  /** The maximum number of concurrent connections; connections beyond it are dropped. Defaults to `Infinity`. */
+  /**
+   * The maximum number of concurrent connections; connections beyond it are dropped. Defaults to
+   * `Infinity`.
+   */
   maxConnections?: number
-  /** Send data immediately without buffering, disabling Nagle's algorithm, on each incoming socket. Defaults to `false`. */
+  /**
+   * Send data immediately without buffering, disabling Nagle's algorithm, on each incoming socket.
+   * Defaults to `false`.
+   */
   noDelay?: boolean
-  /** Pause each incoming socket on connection instead of opening it eagerly. Defaults to `false`. */
+  /**
+   * Pause each incoming socket on connection instead of opening it eagerly. Defaults to `false`.
+   */
   pauseOnConnect?: boolean
   /** Size, in bytes, of each incoming socket's read buffer. Defaults to `65536`. */
   readBufferSize?: number
@@ -197,20 +231,26 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
   readonly closing: boolean
   /** A `Set` of active connections. */
   readonly connections: Set<TCPSocket>
-  /** The maximum number of concurrent connections; connections beyond it are destroyed and reported via the `'drop'` event. Defaults to `Infinity`. */
+  /**
+   * The maximum number of concurrent connections; connections beyond it are destroyed and reported
+   * via the `'drop'` event. Defaults to `Infinity`.
+   */
   maxConnections: number
 
   /**
-   * @returns The bound address as `{ address, family, port }`, or `null` if the server is not listening.
+   * @returns The bound address as `{ address, family, port }`, or `null` if the server is not
+   * listening.
    */
   address(): TCPSocketAddress
 
   /**
-   * Start listening for connections on `port` and `host`. If `port` is `0`, an available port is assigned. If `host` is not provided, it defaults to `'localhost'`. `backlog` defaults to `511`.
+   * Start listening for connections on `port` and `host`. If `port` is `0`, an available port is
+   * assigned. If `host` is not provided, it defaults to `'localhost'`. `backlog` defaults to `511`.
    * @param port - The port to listen on; if `0` (the default), an available port is assigned.
    * @param host - The host to listen on; defaults to `'localhost'`.
    * @param backlog - The maximum length of the queue of pending connections (default `511`).
-   * @param opts - Listen options; the positional arguments may be given here instead, and `lookup` (default `dns.lookup`) resolves `host` when it is a hostname.
+   * @param opts - Listen options; the positional arguments may be given here instead, and `lookup`
+   * (default `dns.lookup`) resolves `host` when it is a hostname.
    * @param onlistening - Called once when the server emits `'listening'`.
    * @throws {SERVER_ALREADY_LISTENING} the server is already listening.
    * @throws {SERVER_IS_CLOSED} the server has been closed.
@@ -229,8 +269,10 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
   listen(onlistening: () => void): this
 
   /**
-   * Close the server. No new connections will be accepted. The server emits `close` after all existing connections have ended.
-   * @param onclose - Called once when the server emits `'close'`, after all existing connections have ended.
+   * Close the server. No new connections will be accepted. The server emits `close` after all
+   * existing connections have ended.
+   * @param onclose - Called once when the server emits `'close'`, after all existing connections
+   * have ended.
    */
   close(onclose?: (err?: Error) => void): this
 
@@ -241,13 +283,17 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
 }
 
 declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
-  /** Create a new TCP server. If `onconnection` is provided, it is added as a listener for the `connection` event. */
+  /**
+   * Create a new TCP server. If `onconnection` is provided, it is added as a listener for the
+   * `connection` event.
+   */
   constructor(opts?: TCPServerOptions, onconnection?: () => void)
   constructor(onconnection: () => void)
 }
 
 /**
- * Create a new socket and connect it to `port` on `host`. Shorthand for `new tcp.Socket(options).connect(port, host, options, onconnect)`.
+ * Create a new socket and connect it to `port` on `host`. Shorthand for `new
+ * tcp.Socket(options).connect(port, host, options, onconnect)`.
  * @param port - The port to connect to.
  * @param host - The host to connect to; defaults to `'localhost'`.
  * @param opts - Options passed to both the `TCPSocket` constructor and `connect()`.
@@ -273,7 +319,8 @@ declare function createConnection(opts: TCPSocketOptions & TCPSocketConnectOptio
 
 /**
  * Create a new TCP server. `server` extends <https://github.com/holepunchto/bare-events>.
- * @param opts - Options applied to each incoming socket; `readBufferSize` defaults to `65536`, `allowHalfOpen` to `true`, and `keepAlive`, `noDelay`, and `pauseOnConnect` to `false`.
+ * @param opts - Options applied to each incoming socket; `readBufferSize` defaults to `65536`,
+ * `allowHalfOpen` to `true`, and `keepAlive`, `noDelay`, and `pauseOnConnect` to `false`.
  * @param onconnection - Called on each `'connection'` event.
  */
 declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
