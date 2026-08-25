@@ -1,9 +1,19 @@
 #include <assert.h>
 #include <bare.h>
 #include <js.h>
-#include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <utf.h>
 #include <uv.h>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
+typedef utf8_t bare_tcp_address_t[INET6_ADDRSTRLEN + 1 /* '%' */ + UV_IF_NAMESIZE + 1 /* NULL */];
 
 typedef struct {
   uv_tcp_t handle;
@@ -32,6 +42,122 @@ typedef struct {
 
   js_deferred_teardown_t *teardown;
 } bare_tcp_t;
+
+static inline int
+bare_tcp__get_address(js_env_t *env, js_value_t *value, utf8_t *str, size_t len) {
+  int err;
+
+  size_t written;
+  err = js_get_value_string_utf8(env, value, str, len, &written);
+  assert(err == 0);
+
+  if (written == len) {
+    err = js_throw_error(env, uv_err_name(UV_ENAMETOOLONG), uv_strerror(UV_ENAMETOOLONG));
+    assert(err == 0);
+
+    return -1;
+  }
+
+  return 0;
+}
+
+static inline int
+bare_tcp__to_sockaddr(const utf8_t *ip, uint32_t port, uint32_t family, struct sockaddr_storage *result) {
+  if (family == 6) {
+    return uv_ip6_addr((char *) ip, (int) port, (struct sockaddr_in6 *) result);
+  }
+
+  return uv_ip4_addr((char *) ip, (int) port, (struct sockaddr_in *) result);
+}
+
+static inline void
+bare_tcp__from_sockaddr(const struct sockaddr *addr, bare_tcp_address_t ip, uint32_t *port, uint32_t *family) {
+  int err;
+
+  if (addr->sa_family == AF_INET) {
+    const struct sockaddr_in *in = (const struct sockaddr_in *) addr;
+
+    err = uv_inet_ntop(AF_INET, &in->sin_addr, (char *) ip, INET6_ADDRSTRLEN);
+    assert(err == 0);
+
+    *port = ntohs(in->sin_port);
+    *family = 4;
+  } else if (addr->sa_family == AF_INET6) {
+    const struct sockaddr_in6 *in6 = (const struct sockaddr_in6 *) addr;
+
+    err = uv_inet_ntop(AF_INET6, &in6->sin6_addr, (char *) ip, INET6_ADDRSTRLEN);
+    assert(err == 0);
+
+    *port = ntohs(in6->sin6_port);
+    *family = 6;
+  } else {
+    ip[0] = '\0';
+
+    *port = 0;
+    *family = 0;
+  }
+}
+
+static inline int
+bare_tcp__buffers(js_env_t *env, js_value_t *value, uv_buf_t **result, uint32_t *len) {
+  int err;
+
+  uint32_t bufs_len;
+  err = js_get_array_length(env, value, &bufs_len);
+  assert(err == 0);
+
+  uv_buf_t *bufs = malloc(sizeof(uv_buf_t) * bufs_len);
+
+  js_value_t **elements = malloc(sizeof(js_value_t *) * bufs_len);
+
+  if (bufs == NULL || elements == NULL) {
+    free(bufs);
+    free(elements);
+
+    err = js_throw_error(env, uv_err_name(UV_ENOMEM), uv_strerror(UV_ENOMEM));
+    assert(err == 0);
+
+    return -1;
+  }
+
+  err = js_get_array_elements(env, value, elements, bufs_len, 0, NULL);
+  assert(err == 0);
+
+  for (uint32_t i = 0; i < bufs_len; i++) {
+    uv_buf_t *buf = &bufs[i];
+
+    size_t buf_len;
+    err = js_get_typedarray_info(env, elements[i], NULL, (void **) &buf->base, &buf_len, NULL, NULL);
+    assert(err == 0);
+
+    buf->len = buf_len;
+  }
+
+  free(elements);
+
+  *result = bufs;
+  *len = bufs_len;
+
+  return 0;
+}
+
+static inline void
+bare_tcp__close_socket(uv_os_sock_t socket) {
+#ifdef _WIN32
+  closesocket(socket);
+#else
+  close(socket);
+#endif
+}
+
+static inline void
+bare_tcp__close_osfhandle(int fd) {
+#ifdef _WIN32
+  _close(fd);
+#else
+  close(fd);
+#endif
+}
 
 static void
 bare_tcp__on_connection(uv_stream_t *server, int status) {
@@ -85,7 +211,7 @@ bare_tcp__on_connect(uv_connect_t *req, int status) {
 
   bare_tcp_t *tcp = (bare_tcp_t *) req->data;
 
-  if (tcp->closing || tcp->exiting) return;
+  if (tcp->closing || tcp->resetting || tcp->exiting) return;
 
   js_env_t *env = tcp->env;
 
@@ -154,11 +280,11 @@ bare_tcp__on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
 
   if (nread < 0) {
     js_value_t *code;
-    err = js_create_string_utf8(env, (utf8_t *) uv_err_name(nread), -1, &code);
+    err = js_create_string_utf8(env, (utf8_t *) uv_err_name((int) nread), -1, &code);
     assert(err == 0);
 
     js_value_t *message;
-    err = js_create_string_utf8(env, (utf8_t *) uv_strerror(nread), -1, &message);
+    err = js_create_string_utf8(env, (utf8_t *) uv_strerror((int) nread), -1, &message);
     assert(err == 0);
 
     err = js_create_error(env, code, message, &argv[0]);
@@ -170,7 +296,7 @@ bare_tcp__on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
     err = js_get_null(env, &argv[0]);
     assert(err == 0);
 
-    err = js_create_int32(env, nread, &argv[1]);
+    err = js_create_int32(env, (int32_t) nread, &argv[1]);
     assert(err == 0);
   }
 
@@ -280,6 +406,8 @@ bare_tcp__on_close(uv_handle_t *handle) {
 
   js_env_t *env = tcp->env;
 
+  js_deferred_teardown_t *teardown = tcp->teardown;
+
   js_handle_scope_t *scope;
   err = js_open_handle_scope(env, &scope);
   assert(err == 0);
@@ -288,7 +416,7 @@ bare_tcp__on_close(uv_handle_t *handle) {
   err = js_get_reference_value(env, tcp->ctx, &ctx);
   assert(err == 0);
 
-  if (tcp->resetting && !tcp->exiting && !tcp->closing) {
+  if (tcp->resetting && !tcp->closing && !tcp->exiting) {
     uv_loop_t *loop;
     err = js_get_env_loop(env, &loop);
     assert(err == 0);
@@ -323,45 +451,45 @@ bare_tcp__on_close(uv_handle_t *handle) {
 
     err = js_close_handle_scope(env, scope);
     assert(err == 0);
-  } else {
-    js_deferred_teardown_t *teardown = tcp->teardown;
 
-    js_value_t *on_close;
-    err = js_get_reference_value(env, tcp->on_close, &on_close);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_connection);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_connect);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_reset);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_read);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_write);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_end);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->on_close);
-    assert(err == 0);
-
-    err = js_delete_reference(env, tcp->ctx);
-    assert(err == 0);
-
-    if (!tcp->exiting) js_call_function(env, ctx, on_close, 0, NULL, NULL);
-
-    err = js_close_handle_scope(env, scope);
-    assert(err == 0);
-
-    err = js_finish_deferred_teardown_callback(teardown);
-    assert(err == 0);
+    return;
   }
+
+  js_value_t *on_close;
+  err = js_get_reference_value(env, tcp->on_close, &on_close);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_connection);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_connect);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_reset);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_read);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_write);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_end);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->on_close);
+  assert(err == 0);
+
+  err = js_delete_reference(env, tcp->ctx);
+  assert(err == 0);
+
+  if (!tcp->exiting) js_call_function(env, ctx, on_close, 0, NULL, NULL);
+
+  err = js_close_handle_scope(env, scope);
+  assert(err == 0);
+
+  err = js_finish_deferred_teardown_callback(teardown);
+  assert(err == 0);
 }
 
 static void
@@ -418,8 +546,11 @@ bare_tcp_init(js_env_t *env, js_callback_info_t *info) {
   tcp->closing = false;
   tcp->exiting = false;
 
-  err = js_get_typedarray_info(env, argv[0], NULL, (void **) &tcp->read.base, (size_t *) &tcp->read.len, NULL, NULL);
+  size_t read_len;
+  err = js_get_typedarray_info(env, argv[0], NULL, (void **) &tcp->read.base, &read_len, NULL, NULL);
   assert(err == 0);
+
+  tcp->read.len = read_len;
 
   err = js_create_reference(env, argv[1], 1, &tcp->ctx);
   assert(err == 0);
@@ -471,9 +602,8 @@ bare_tcp_connect(js_env_t *env, js_callback_info_t *info) {
   err = js_get_value_uint32(env, argv[1], &port);
   assert(err == 0);
 
-  utf8_t ip[INET6_ADDRSTRLEN];
-  err = js_get_value_string_utf8(env, argv[2], ip, INET6_ADDRSTRLEN, NULL);
-  assert(err == 0);
+  bare_tcp_address_t ip;
+  if (bare_tcp__get_address(env, argv[2], ip, sizeof(ip)) < 0) return NULL;
 
   uint32_t family;
   err = js_get_value_uint32(env, argv[3], &family);
@@ -481,11 +611,7 @@ bare_tcp_connect(js_env_t *env, js_callback_info_t *info) {
 
   struct sockaddr_storage addr;
 
-  if (family == 4) {
-    err = uv_ip4_addr((char *) ip, port, (struct sockaddr_in *) &addr);
-  } else {
-    err = uv_ip6_addr((char *) ip, port, (struct sockaddr_in6 *) &addr);
-  }
+  err = bare_tcp__to_sockaddr(ip, port, family, &addr);
 
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
@@ -553,30 +679,20 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
   err = js_get_value_uint32(env, argv[1], &port);
   assert(err == 0);
 
-  utf8_t ip[INET6_ADDRSTRLEN];
-  err = js_get_value_string_utf8(env, argv[2], ip, INET6_ADDRSTRLEN, NULL);
+  bare_tcp_address_t ip;
+  if (bare_tcp__get_address(env, argv[2], ip, sizeof(ip)) < 0) return NULL;
+
+  uint32_t family;
+  err = js_get_value_uint32(env, argv[3], &family);
   assert(err == 0);
 
   uint32_t backlog;
-  err = js_get_value_uint32(env, argv[3], &backlog);
-  assert(err == 0);
-
-  if (backlog > INT_MAX) backlog = INT_MAX;
-
-  uint32_t family;
-  err = js_get_value_uint32(env, argv[4], &family);
+  err = js_get_value_uint32(env, argv[4], &backlog);
   assert(err == 0);
 
   struct sockaddr_storage addr;
-  int addr_len;
 
-  if (family == 4) {
-    addr_len = sizeof(struct sockaddr_in);
-    err = uv_ip4_addr((char *) ip, port, (struct sockaddr_in *) &addr);
-  } else {
-    addr_len = sizeof(struct sockaddr_in6);
-    err = uv_ip6_addr((char *) ip, port, (struct sockaddr_in6 *) &addr);
-  }
+  err = bare_tcp__to_sockaddr(ip, port, family, &addr);
 
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
@@ -594,13 +710,11 @@ bare_tcp_bind(js_env_t *env, js_callback_info_t *info) {
     return NULL;
   }
 
-  err = uv_listen((uv_stream_t *) &tcp->handle, backlog, bare_tcp__on_connection);
+  err = uv_listen((uv_stream_t *) &tcp->handle, (int) backlog, bare_tcp__on_connection);
 
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
     assert(err == 0);
-
-    return NULL;
   }
 
   return NULL;
@@ -633,8 +747,6 @@ bare_tcp_open(js_env_t *env, js_callback_info_t *info) {
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
     assert(err == 0);
-
-    return NULL;
   }
 
   return NULL;
@@ -742,25 +854,9 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
   assert(err == 0);
 
-  js_value_t *arr = argv[1];
-
+  uv_buf_t *bufs;
   uint32_t bufs_len;
-  err = js_get_array_length(env, arr, &bufs_len);
-  assert(err == 0);
-
-  uv_buf_t *bufs = malloc(sizeof(uv_buf_t) * bufs_len);
-
-  js_value_t **elements = malloc(sizeof(js_value_t *) * bufs_len);
-  err = js_get_array_elements(env, arr, elements, bufs_len, 0, NULL);
-  assert(err == 0);
-
-  for (uint32_t i = 0; i < bufs_len; i++) {
-    js_value_t *item = elements[i];
-
-    uv_buf_t *buf = &bufs[i];
-    err = js_get_typedarray_info(env, item, NULL, (void **) &buf->base, (size_t *) &buf->len, NULL, NULL);
-    assert(err == 0);
-  }
+  if (bare_tcp__buffers(env, argv[1], &bufs, &bufs_len) < 0) return NULL;
 
   uv_write_t *req = &tcp->requests.write;
 
@@ -769,7 +865,6 @@ bare_tcp_writev(js_env_t *env, js_callback_info_t *info) {
   err = uv_write(req, (uv_stream_t *) &tcp->handle, bufs, bufs_len, bare_tcp__on_write);
 
   free(bufs);
-  free(elements);
 
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
@@ -837,62 +932,6 @@ bare_tcp_close(js_env_t *env, js_callback_info_t *info) {
 }
 
 static js_value_t *
-bare_tcp_keepalive(js_env_t *env, js_callback_info_t *info) {
-  int err;
-
-  size_t argc = 3;
-  js_value_t *argv[3];
-
-  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
-  assert(err == 0);
-
-  assert(argc == 3);
-
-  bare_tcp_t *tcp;
-  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
-  assert(err == 0);
-
-  bool enable;
-  err = js_get_value_bool(env, argv[1], &enable);
-  assert(err == 0);
-
-  uint32_t delay;
-  err = js_get_value_uint32(env, argv[2], &delay);
-  assert(err == 0);
-
-  err = uv_tcp_keepalive(&tcp->handle, enable, delay);
-  assert(err == 0);
-
-  return NULL;
-}
-
-static js_value_t *
-bare_tcp_nodelay(js_env_t *env, js_callback_info_t *info) {
-  int err;
-
-  size_t argc = 2;
-  js_value_t *argv[2];
-
-  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
-  assert(err == 0);
-
-  assert(argc == 2);
-
-  bare_tcp_t *tcp;
-  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
-  assert(err == 0);
-
-  bool enable;
-  err = js_get_value_bool(env, argv[1], &enable);
-  assert(err == 0);
-
-  err = uv_tcp_nodelay(&tcp->handle, enable);
-  assert(err == 0);
-
-  return NULL;
-}
-
-static js_value_t *
 bare_tcp_address(js_env_t *env, js_callback_info_t *info) {
   int err;
 
@@ -928,52 +967,34 @@ bare_tcp_address(js_env_t *env, js_callback_info_t *info) {
     return NULL;
   }
 
+  bare_tcp_address_t ip;
+  uint32_t port;
+  uint32_t family;
+
+  bare_tcp__from_sockaddr((struct sockaddr *) &addr, ip, &port, &family);
+
+  if (family == 0) {
+    err = js_throw_error(env, uv_err_name(UV_EAI_ADDRFAMILY), uv_strerror(UV_EAI_ADDRFAMILY));
+    assert(err == 0);
+
+    return NULL;
+  }
+
   js_value_t *result;
   err = js_create_object(env, &result);
   assert(err == 0);
 
   js_value_t *result_address;
+  err = js_create_string_utf8(env, ip, -1, &result_address);
+  assert(err == 0);
+
   js_value_t *result_family;
+  err = js_create_uint32(env, family, &result_family);
+  assert(err == 0);
+
   js_value_t *result_port;
-
-  if (addr.ss_family == AF_INET) {
-    struct sockaddr_in *addr_in = (struct sockaddr_in *) &addr;
-
-    char address[INET_ADDRSTRLEN];
-    err = uv_inet_ntop(AF_INET, &(addr_in->sin_addr), address, sizeof(address));
-    assert(err == 0);
-
-    err = js_create_string_utf8(env, (utf8_t *) address, -1, &result_address);
-    assert(err == 0);
-
-    err = js_create_int32(env, 4, &result_family);
-    assert(err == 0);
-
-    err = js_create_int32(env, ntohs(addr_in->sin_port), &result_port);
-    assert(err == 0);
-  } else if (addr.ss_family == AF_INET6) {
-    struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *) &addr;
-
-    char address[INET6_ADDRSTRLEN];
-    err = uv_inet_ntop(AF_INET6, &(addr_in6->sin6_addr), address, sizeof(address));
-    assert(err == 0);
-
-    err = js_create_string_utf8(env, (utf8_t *) address, -1, &result_address);
-    assert(err == 0);
-
-    err = js_create_int32(env, 6, &result_family);
-    assert(err == 0);
-
-    err = js_create_int32(env, ntohs(addr_in6->sin6_port), &result_port);
-    assert(err == 0);
-  } else {
-    err = UV_EAI_ADDRFAMILY;
-
-    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
-    assert(err == 0);
-
-    return NULL;
-  }
+  err = js_create_uint32(env, port, &result_port);
+  assert(err == 0);
 
   err = js_set_named_property(env, result, "address", result_address);
   assert(err == 0);
@@ -985,6 +1006,72 @@ bare_tcp_address(js_env_t *env, js_callback_info_t *info) {
   assert(err == 0);
 
   return result;
+}
+
+static js_value_t *
+bare_tcp_keepalive(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 3;
+  js_value_t *argv[3];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 3);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  bool enable;
+  err = js_get_value_bool(env, argv[1], &enable);
+  assert(err == 0);
+
+  uint32_t delay;
+  err = js_get_value_uint32(env, argv[2], &delay);
+  assert(err == 0);
+
+  err = uv_tcp_keepalive(&tcp->handle, enable, (unsigned int) delay);
+
+  if (err == UV_EINVAL && enable && delay == 0) err = 0;
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+  }
+
+  return NULL;
+}
+
+static js_value_t *
+bare_tcp_nodelay(js_env_t *env, js_callback_info_t *info) {
+  int err;
+
+  size_t argc = 2;
+  js_value_t *argv[2];
+
+  err = js_get_callback_info(env, info, &argc, argv, NULL, NULL);
+  assert(err == 0);
+
+  assert(argc == 2);
+
+  bare_tcp_t *tcp;
+  err = js_get_arraybuffer_info(env, argv[0], (void **) &tcp, NULL);
+  assert(err == 0);
+
+  bool enable;
+  err = js_get_value_bool(env, argv[1], &enable);
+  assert(err == 0);
+
+  err = uv_tcp_nodelay(&tcp->handle, enable);
+
+  if (err < 0) {
+    err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
+    assert(err == 0);
+  }
+
+  return NULL;
 }
 
 static js_value_t *
@@ -1033,8 +1120,8 @@ static js_value_t *
 bare_tcp_socketpair(js_env_t *env, js_callback_info_t *info) {
   int err;
 
-  uv_os_sock_t fds[2];
-  err = uv_socketpair(SOCK_STREAM, 0, fds, UV_NONBLOCK_PIPE, UV_NONBLOCK_PIPE);
+  uv_os_sock_t socks[2];
+  err = uv_socketpair(SOCK_STREAM, 0, socks, UV_NONBLOCK_PIPE, UV_NONBLOCK_PIPE);
 
   if (err < 0) {
     err = js_throw_error(env, uv_err_name(err), uv_strerror(err));
@@ -1043,20 +1130,32 @@ bare_tcp_socketpair(js_env_t *env, js_callback_info_t *info) {
     return NULL;
   }
 
-  int out[2];
-  out[0] = uv_open_osfhandle((uv_os_fd_t) fds[0]);
-  out[1] = uv_open_osfhandle((uv_os_fd_t) fds[1]);
+  int fds[2];
+  fds[0] = uv_open_osfhandle((uv_os_fd_t) socks[0]);
+  fds[1] = uv_open_osfhandle((uv_os_fd_t) socks[1]);
+
+  if (fds[0] < 0 || fds[1] < 0) {
+    for (int i = 0; i < 2; i++) {
+      if (fds[i] < 0) bare_tcp__close_socket(socks[i]);
+      else bare_tcp__close_osfhandle(fds[i]);
+    }
+
+    err = js_throw_error(env, uv_err_name(UV_EBADF), uv_strerror(UV_EBADF));
+    assert(err == 0);
+
+    return NULL;
+  }
 
   js_value_t *result;
   err = js_create_array_with_length(env, 2, &result);
   assert(err == 0);
 
   js_value_t *first;
-  err = js_create_int32(env, out[0], &first);
+  err = js_create_int32(env, fds[0], &first);
   assert(err == 0);
 
   js_value_t *second;
-  err = js_create_int32(env, out[1], &second);
+  err = js_create_int32(env, fds[1], &second);
   assert(err == 0);
 
   err = js_set_element(env, result, 0, first);
@@ -1092,12 +1191,24 @@ bare_tcp_exports(js_env_t *env, js_value_t *exports) {
   V("writev", bare_tcp_writev)
   V("end", bare_tcp_end)
   V("close", bare_tcp_close)
+  V("address", bare_tcp_address)
   V("keepalive", bare_tcp_keepalive)
   V("nodelay", bare_tcp_nodelay)
-  V("address", bare_tcp_address)
   V("ref", bare_tcp_ref)
   V("unref", bare_tcp_unref)
   V("socketpair", bare_tcp_socketpair)
+#undef V
+
+#define V(name, n) \
+  { \
+    js_value_t *val; \
+    err = js_create_uint32(env, n, &val); \
+    assert(err == 0); \
+    err = js_set_named_property(env, exports, name, val); \
+    assert(err == 0); \
+  }
+
+  V("MAX_ADDRESS_LENGTH", sizeof(bare_tcp_address_t) - 1 /* NULL */)
 #undef V
 
   return exports;

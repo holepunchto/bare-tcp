@@ -24,7 +24,7 @@ socket.write('hello world')
 
 #### `const socket = new tcp.Socket([options])`
 
-Create a new TCP socket.
+Create a new TCP socket. `socket` extends <https://github.com/holepunchto/bare-stream>.
 
 Options include:
 
@@ -35,6 +35,10 @@ options = {
   eagerOpen: true
 }
 ```
+
+#### `const socket = tcp.createConnection(port[, host[, options]][, onconnect])`
+
+Create a new socket and connect it to `port` on `host`. Shorthand for `new tcp.Socket(options).connect(port, host, options, onconnect)`.
 
 #### `socket.connecting`
 
@@ -51,6 +55,18 @@ The timeout in milliseconds, or `undefined` if no timeout is set.
 #### `socket.readyState`
 
 The current state of the socket. Either `'open'` or `'opening'`.
+
+#### `socket.keepAlive`
+
+Whether keep-alive is enabled.
+
+#### `socket.keepAliveInitialDelay`
+
+The keep-alive initial delay in milliseconds.
+
+#### `socket.noDelay`
+
+Whether Nagle's algorithm is disabled.
 
 #### `socket.localAddress`
 
@@ -80,6 +96,8 @@ The remote port of the socket, if connected.
 
 Connect the socket to `port` on `host`. If `host` is not provided, it defaults to `'localhost'`. `onconnect` is called when the connection is established.
 
+Hosts may carry a zone identifier, such as `fe80::1%en0`, and an IP address may be at most `tcp.constants.address.MAX_LENGTH` bytes long.
+
 Options include:
 
 ```js
@@ -96,13 +114,34 @@ options = {
 
 If `host` is a hostname, `options.lookup` is used to resolve it. By default, <https://github.com/holepunchto/bare-dns> is used. Set `options.family` to `4` or `6` to restrict the lookup to IPv4 or IPv6.
 
+A custom `lookup` must resolve to IP addresses, as a resolved address is used as the host of another connect or listen. A result that is not an IP address, or is not shaped like the result `bare-dns` returns, is reported as a failed lookup rather than resolved again.
+
+#### `socket.open(fd[, options][, onconnect])`
+
+Adopt an already connected socket from the file descriptor `fd`, such as one obtained from `tcp.socketpair()` or received over IPC. `onconnect` is called when the socket is ready.
+
+Options include:
+
+```js
+options = {
+  keepAlive: false,
+  keepAliveInitialDelay: 0,
+  noDelay: false,
+  timeout: null
+}
+```
+
 #### `socket.setKeepAlive([enable][, delay])`
 
-Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first keep-alive probe is sent.
+Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first keep-alive probe is sent; when it is `0`, the system default is used. Passing a number as the first argument enables keep-alive with that delay.
+
+The option is applied once the socket is connected.
 
 #### `socket.setNoDelay([enable])`
 
 Enable or disable Nagle's algorithm. When `enable` is `true` (the default), data is sent immediately without buffering.
+
+The option is applied once the socket is connected.
 
 #### `socket.setTimeout(ms[, ontimeout])`
 
@@ -128,7 +167,7 @@ Emitted after resolving the hostname. The arguments are `err`, `address`, `famil
 
 Emitted when the socket times out due to inactivity.
 
-#### `const server = tcp.createServer([options][, onconnection])`
+#### `const server = new tcp.Server([options][, onconnection])`
 
 Create a new TCP server. `server` extends <https://github.com/holepunchto/bare-events>.
 
@@ -141,11 +180,16 @@ options = {
   keepAlive: false,
   keepAliveInitialDelay: 0,
   noDelay: false,
-  pauseOnConnect: false
+  pauseOnConnect: false,
+  maxConnections: Infinity
 }
 ```
 
 These options are applied to each incoming socket. If `onconnection` is provided, it is added as a listener for the `connection` event.
+
+#### `const server = tcp.createServer([options][, onconnection])`
+
+Convenience function equivalent to `new tcp.Server(options, onconnection)`.
 
 #### `server.listening`
 
@@ -158,6 +202,10 @@ Whether the server is closing.
 #### `server.connections`
 
 A `Set` of active connections.
+
+#### `server.maxConnections`
+
+The maximum number of concurrent connections. Further connections are dropped and a `drop` event is emitted. `0` or `Infinity` means no limit.
 
 #### `server.address()`
 
@@ -179,7 +227,9 @@ options = {
 
 #### `server.close([onclose])`
 
-Close the server. No new connections will be accepted. The server emits `close` after all existing connections have ended.
+Close the server, releasing the port right away so that no new connections are accepted. Existing connections are left open and the server emits `close` after all of them have ended. `server.listening` is `false` and `server.address()` returns `null` as soon as `close()` is called.
+
+Once the server has fully closed, `server.closing` returns to `false` and the server may `listen()` again, as in Node.
 
 A connection accepted with `allowHalfOpen: true` stays open after the peer closes its end: the peer's `FIN` ends only the readable half, and the writable half remains open until the local side ends it. Such a connection has not "ended", so it keeps the server open and `close` will not fire until you end it (for example `socket.on('end', () => socket.end())`). This matches Node's `net`, which also waits for half-open connections to end.
 
@@ -197,7 +247,11 @@ Emitted when the server starts listening.
 
 #### `event: 'connection'`
 
-Emitted when a new connection is received. The argument is a `TCPSocket`.
+Emitted when a new connection is received. The argument is a `tcp.Socket`.
+
+#### `event: 'drop'`
+
+Emitted when a connection is dropped because `server.maxConnections` was reached. The argument is the address information of the dropped connection.
 
 #### `event: 'close'`
 
@@ -211,9 +265,9 @@ Emitted when an error occurs.
 
 Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
 
-#### `const socket = tcp.createConnection(port[, host[, options]][, onconnect])`
+#### `const [first, second] = tcp.socketpair()`
 
-Create a new socket and connect it to `port` on `host`. Shorthand for `new tcp.Socket(options).connect(port, host, options, onconnect)`.
+Create a pair of connected sockets, returning their file descriptors. Use `socket.open(fd)` to adopt them.
 
 #### `tcp.isIP(host)`
 
@@ -229,11 +283,19 @@ Returns `true` if `host` is an IPv6 address.
 
 #### `tcp.constants`
 
-Object containing internal state constants.
+Object containing internal state constants, as well as `address.MAX_LENGTH`, the maximum length in bytes of an IP address accepted by `socket.connect()` and `server.listen()`:
+
+```js
+tcp.constants.address.MAX_LENGTH
+```
 
 #### `tcp.errors`
 
-Class for TCP-specific errors.
+Class for TCP specific errors, with a static factory per error code.
+
+## IPC handle passing
+
+`tcp.Socket` implements the `IPCAcceptable` protocol, so a connected socket can be passed to a peer over a `bare-pipe` created with `ipc: true`, and a received socket can be adopted with `pipe.accept(socket)`. See <https://github.com/holepunchto/bare-pipe#ipc-handle-passing>.
 
 ## License
 

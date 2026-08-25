@@ -6,7 +6,11 @@ declare const constants: {
     BOUND: number
     READING: number
     CLOSING: number
+    CLOSED: number
     UNREFED: number
+  }
+  address: {
+    MAX_LENGTH: number
   }
 }
 
