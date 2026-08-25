@@ -229,6 +229,8 @@ options = {
 
 Close the server, releasing the port right away so that no new connections are accepted. Existing connections are left open and the server emits `close` after all of them have ended. `server.listening` is `false` and `server.address()` returns `null` as soon as `close()` is called.
 
+Once the server has fully closed, `server.closing` returns to `false` and the server may `listen()` again, as in Node.
+
 A connection accepted with `allowHalfOpen: true` stays open after the peer closes its end: the peer's `FIN` ends only the readable half, and the writable half remains open until the local side ends it. Such a connection has not "ended", so it keeps the server open and `close` will not fire until you end it (for example `socket.on('end', () => socket.end())`). This matches Node's `net`, which also waits for half-open connections to end.
 
 #### `server.ref()`
