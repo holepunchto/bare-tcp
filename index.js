@@ -16,15 +16,17 @@ exports.Socket = class TCPSocket extends Duplex {
   constructor(opts = {}) {
     const { readBufferSize = defaultReadBufferSize, allowHalfOpen = true, eagerOpen = true } = opts
 
+    validateInteger(readBufferSize, 'Read buffer size', 1, 0x7fffffff)
+
     super({ eagerOpen })
 
     this._state = 0
 
     this._allowHalfOpen = allowHalfOpen
 
-    this._keepAlive = 0
+    this._keepAlive = false
     this._keepAliveInitialDelay = 0
-    this._noDelay = 0
+    this._noDelay = false
 
     this._localAddress = null
     this._remoteAddress = null
@@ -76,6 +78,18 @@ exports.Socket = class TCPSocket extends Duplex {
     return 'opening'
   }
 
+  get keepAlive() {
+    return this._keepAlive
+  }
+
+  get keepAliveInitialDelay() {
+    return this._keepAliveInitialDelay
+  }
+
+  get noDelay() {
+    return this._noDelay
+  }
+
   get localAddress() {
     if (this._localAddress) return this._localAddress.address
   }
@@ -105,7 +119,11 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   connect(port, host = 'localhost', opts = {}, onconnect) {
-    if (this._state & constants.state.CONNECTING || this._state & constants.state.CONNECTED) {
+    if (this._state & constants.state.CLOSING) {
+      throw errors.SOCKET_IS_CLOSED('Socket is closed')
+    }
+
+    if (this._state & (constants.state.CONNECTING | constants.state.CONNECTED)) {
       throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
     }
 
@@ -120,7 +138,7 @@ exports.Socket = class TCPSocket extends Duplex {
     let family = 0
 
     if (typeof port === 'object' && port !== null) {
-      opts = port || {}
+      opts = port
       port = opts.port || 0
       host = opts.host || 'localhost'
       family = opts.family || 0
@@ -128,6 +146,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
     if (!host) host = 'localhost'
 
+    validateHost(host, 'Host')
     validatePort(port)
 
     this._state |= constants.state.CONNECTING
@@ -149,12 +168,9 @@ exports.Socket = class TCPSocket extends Duplex {
 
         this._state &= ~constants.state.CONNECTING
 
-        if (err || addresses.length === 0) {
-          if (!err) {
-            err = new Error(`No address found for host "${host}"`)
-            err.code = 'ENOTFOUND'
-          }
+        if (!err) err = lookupError(addresses, host)
 
+        if (err) {
           this.emit('lookup', err, null, 0, host)
 
           if (this._pendingOpen) this._continueOpen(err)
@@ -169,12 +185,7 @@ exports.Socket = class TCPSocket extends Duplex {
         const [{ address, family }, ...rest] = addresses
 
         if (rest.length > 0) {
-          this._addresses = rest.map(({ address, family }) => [
-            port,
-            address,
-            { ...opts, family },
-            onconnect
-          ])
+          this._addresses = rest.map(({ address, family }) => [port, address, { ...opts, family }])
 
           this._errors = []
         }
@@ -190,27 +201,27 @@ exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.connect(this._handle, port, host, family)
 
-      if (keepAlive) {
-        this._keepAlive = keepAlive
-        this._keepAliveInitialDelay = keepAliveInitialDelay
-      }
-      if (noDelay) this._noDelay = noDelay
+      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
+      if (noDelay) this.setNoDelay(noDelay)
       if (timeout) this.setTimeout(timeout)
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
-      this._state &= ~constants.state.CONNECTING
-
-      queueMicrotask(() => {
-        if (this._pendingOpen) this._pendingOpen(err)
-        else this.destroy(err)
-      })
+      queueMicrotask(() => this._failConnect(err))
     }
 
     return this
   }
 
   open(fd, opts = {}, onconnect) {
+    if (this._state & constants.state.CLOSING) {
+      throw errors.SOCKET_IS_CLOSED('Socket is closed')
+    }
+
+    if (this._state & (constants.state.CONNECTING | constants.state.CONNECTED)) {
+      throw errors.SOCKET_ALREADY_CONNECTED('Socket is already connected')
+    }
+
     if (typeof opts === 'function') {
       onconnect = opts
       opts = {}
@@ -221,17 +232,33 @@ exports.Socket = class TCPSocket extends Duplex {
       fd = opts.fd
     }
 
+    validateFd(fd)
+
+    const { keepAlive = false, keepAliveInitialDelay = 0, noDelay = false, timeout } = opts
+
     try {
       binding.open(this._handle, fd)
 
+      this._updateAddresses()
+
       this._state |= constants.state.CONNECTED
+
+      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
+      if (noDelay) this.setNoDelay(noDelay)
+      if (timeout) this.setTimeout(timeout)
 
       if (onconnect) this.once('connect', onconnect)
 
-      queueMicrotask(() => this.emit('connect'))
+      this._continueOpen()
+
+      queueMicrotask(() => {
+        if (this._state & constants.state.CLOSING) return
+
+        this.emit('connect')
+      })
     } catch (err) {
       queueMicrotask(() => {
-        if (this._pendingOpen) this._pendingOpen(err)
+        if (this._pendingOpen) this._continueOpen(err)
         else this.destroy(err)
       })
     }
@@ -242,30 +269,41 @@ exports.Socket = class TCPSocket extends Duplex {
   setKeepAlive(enable = false, delay = 0) {
     if (typeof enable === 'number') {
       delay = enable
-      enable = false
+      enable = true
     }
 
-    delay = Math.floor(delay / 1000)
+    validateInteger(delay, 'Keep alive initial delay', 0, 0x7fffffff)
 
-    if (delay === 0) enable = false
+    enable = !!enable
 
-    binding.keepalive(this._handle, enable, delay)
+    this._keepAlive = enable
+    this._keepAliveInitialDelay = delay
+
+    if (this._state & constants.state.CONNECTED) {
+      binding.keepalive(this._handle, enable, Math.floor(delay / 1000))
+    }
 
     return this
   }
 
   setNoDelay(enable = true) {
-    binding.nodelay(this._handle, enable)
+    enable = !!enable
+
+    this._noDelay = enable
+
+    if (this._state & constants.state.CONNECTED) {
+      binding.nodelay(this._handle, enable)
+    }
 
     return this
   }
 
   setTimeout(ms, ontimeout) {
-    if (ms === 0) {
-      clearTimeout(this._timer)
+    clearTimeout(this._timer)
 
-      this._timer = null
-    } else {
+    this._timer = null
+
+    if (ms !== 0) {
       if (ontimeout) this.once('timeout', ontimeout)
 
       this._timer = setTimeout(() => this.emit('timeout'), ms)
@@ -278,12 +316,20 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   ref() {
+    this._state &= ~constants.state.UNREFED
+
+    if (this._state & constants.state.CLOSING) return this
+
     binding.ref(this._handle)
 
     return this
   }
 
   unref() {
+    this._state |= constants.state.UNREFED
+
+    if (this._state & constants.state.CLOSING) return this
+
     binding.unref(this._handle)
 
     return this
@@ -324,12 +370,17 @@ exports.Socket = class TCPSocket extends Duplex {
   _final(cb) {
     this._pendingFinal = cb
 
-    binding.end(this._handle)
+    try {
+      binding.end(this._handle)
+    } catch (err) {
+      this._continueFinal(err)
+    }
   }
 
   _predestroy() {
     if (this._state & constants.state.CLOSING) return
     this._state |= constants.state.CLOSING
+    this._state &= ~constants.state.CONNECTING
 
     binding.close(this._handle)
   }
@@ -337,6 +388,7 @@ exports.Socket = class TCPSocket extends Duplex {
   _destroy(err, cb) {
     if (this._state & constants.state.CLOSING) return cb(err)
     this._state |= constants.state.CLOSING
+    this._state &= ~constants.state.CONNECTING
 
     this._pendingDestroy = cb
 
@@ -373,7 +425,7 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _reset() {
-    this._state = 0
+    this._state &= constants.state.UNREFED
 
     this._localAddress = null
     this._remoteAddress = null
@@ -395,30 +447,37 @@ exports.Socket = class TCPSocket extends Duplex {
     }
   }
 
-  _onconnect(err) {
-    if (err) {
-      if (this._addresses !== null) {
-        this._errors.push(err)
+  _failConnect(err) {
+    if (this._state & constants.state.CLOSING) return
 
-        if (this._addresses.length > 0) return this._reset()
+    if (this._addresses !== null) {
+      this._errors.push(err)
 
-        err = this._errors.length === 1 ? this._errors[0] : new AggregateError(this._errors)
-      }
+      if (this._addresses.length > 0) return this._reset()
 
-      this._state &= ~constants.state.CONNECTING
-
-      if (this._pendingOpen) this._continueOpen(err)
-      else this.destroy(err)
-      return
+      err = this._errors.length === 1 ? this._errors[0] : new AggregateError(this._errors)
     }
 
-    if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
-    if (this._noDelay) this.setNoDelay()
+    this._state &= ~constants.state.CONNECTING
+
+    if (this._pendingOpen) this._continueOpen(err)
+    else this.destroy(err)
+  }
+
+  _onconnect(err) {
+    if (err) {
+      this._failConnect(err)
+      return
+    }
 
     this._updateAddresses()
 
     this._state |= constants.state.CONNECTED
     this._state &= ~constants.state.CONNECTING
+
+    if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+    if (this._noDelay) this.setNoDelay(this._noDelay)
+
     this._continueOpen()
 
     this.emit('connect')
@@ -428,6 +487,7 @@ exports.Socket = class TCPSocket extends Duplex {
     this._updateAddresses()
 
     this._state |= constants.state.CONNECTED
+
     this._continueOpen()
   }
 
@@ -437,6 +497,8 @@ exports.Socket = class TCPSocket extends Duplex {
       this.destroy(this._errors.length === 1 ? this._errors[0] : new AggregateError(this._errors))
       return
     }
+
+    if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     this.connect(...this._addresses.shift())
   }
@@ -502,6 +564,8 @@ exports.Server = class TCPServer extends EventEmitter {
       maxConnections = Infinity
     } = opts
 
+    validateInteger(readBufferSize, 'Read buffer size', 1, 0x7fffffff)
+
     this._state = 0
 
     this._readBufferSize = readBufferSize
@@ -550,12 +614,12 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   listen(port = 0, host = 'localhost', backlog = 511, opts = {}, onlistening) {
-    if (this._state & constants.state.BINDING || this._state & constants.state.BOUND) {
-      throw errors.SERVER_ALREADY_LISTENING('Server is already listening')
-    }
-
     if (this._state & constants.state.CLOSING) {
       throw errors.SERVER_IS_CLOSED('Server is closed')
+    }
+
+    if (this._state & (constants.state.BINDING | constants.state.BOUND)) {
+      throw errors.SERVER_ALREADY_LISTENING('Server is already listening')
     }
 
     if (typeof port === 'function') {
@@ -575,7 +639,7 @@ exports.Server = class TCPServer extends EventEmitter {
     let family = 0
 
     if (typeof port === 'object' && port !== null) {
-      opts = port || {}
+      opts = port
       port = opts.port || 0
       host = opts.host || 'localhost'
       family = opts.family || 0
@@ -585,6 +649,8 @@ exports.Server = class TCPServer extends EventEmitter {
     if (!host) host = 'localhost'
     if (!backlog) backlog = 511
 
+    validateHost(host, 'Host')
+    validateInteger(backlog, 'Backlog', 0, 0x7fffffff)
     validatePort(port)
 
     this._state |= constants.state.BINDING
@@ -595,13 +661,19 @@ exports.Server = class TCPServer extends EventEmitter {
 
     if (type === 0) {
       lookup(host, { family, hints }, (err, address, family) => {
-        if (this._state & constants.state.CLOSING) return
-
-        this.emit('lookup', err, address, family, host)
-
         this._state &= ~constants.state.BINDING
 
-        if (err) return this.emit('error', err)
+        if (this._state & constants.state.CLOSING) return
+
+        if (!err) err = resolvedHostError(address)
+
+        if (err) {
+          this.emit('lookup', err, null, 0, host)
+
+          return this.emit('error', err)
+        }
+
+        this.emit('lookup', null, address, family, host)
 
         this.listen(port, address, backlog, { ...opts, family }, onlistening)
       })
@@ -626,7 +698,7 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     try {
-      binding.bind(this._handle, port, host, backlog, family)
+      binding.bind(this._handle, port, host, family, backlog)
 
       this._address = binding.address(this._handle, true)
 
@@ -635,7 +707,11 @@ exports.Server = class TCPServer extends EventEmitter {
 
       if (onlistening) this.once('listening', onlistening)
 
-      queueMicrotask(() => this.emit('listening'))
+      queueMicrotask(() => {
+        if (this._state & constants.state.CLOSING) return
+
+        this.emit('listening')
+      })
     } catch (err) {
       this._error = err
 
@@ -646,12 +722,20 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   close(onclose) {
+    if (this._state & constants.state.CLOSED) {
+      if (onclose) queueMicrotask(onclose)
+
+      return this
+    }
+
     if (onclose) this.once('close', onclose)
 
     if (this._state & constants.state.CLOSING) return this
     this._state |= constants.state.CLOSING
+    this._state &= ~constants.state.BOUND
 
-    this._closeMaybe()
+    if (this._handle !== null) binding.close(this._handle)
+    else this._closeMaybe()
 
     return this
   }
@@ -673,10 +757,13 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   _closeMaybe() {
-    if (this._state & constants.state.CLOSING && this._connections.size === 0) {
-      if (this._handle !== null) binding.close(this._handle)
-      else queueMicrotask(() => this.emit('close'))
-    }
+    if ((this._state & constants.state.CLOSING) === 0) return
+    if (this._state & constants.state.CLOSED) return
+    if (this._handle !== null || this._connections.size > 0) return
+
+    this._state |= constants.state.CLOSED
+
+    queueMicrotask(() => this.emit('close'))
   }
 
   _onconnection(err) {
@@ -687,10 +774,10 @@ exports.Server = class TCPServer extends EventEmitter {
 
     if (this._state & constants.state.CLOSING) return
 
-    const overLimit = this._connections.size >= this._maxConnections
+    const overLimit = this._maxConnections > 0 && this._connections.size >= this._maxConnections
 
     const socket = new exports.Socket({
-      readBufferSize: overLimit ? 0 : this._readBufferSize,
+      readBufferSize: overLimit ? 1 : this._readBufferSize,
       allowHalfOpen: this._allowHalfOpen,
       eagerOpen: !this._pauseOnConnect
     })
@@ -719,7 +806,7 @@ exports.Server = class TCPServer extends EventEmitter {
       this._connections.add(socket)
 
       if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
-      if (this._noDelay) socket.setNoDelay()
+      if (this._noDelay) socket.setNoDelay(this._noDelay)
 
       socket.on('close', () => {
         this._connections.delete(socket)
@@ -737,14 +824,14 @@ exports.Server = class TCPServer extends EventEmitter {
   _onclose() {
     const err = this._error
 
-    this._state &= ~constants.state.BINDING
-    this._state &= ~constants.state.BOUND
+    this._state &= ~(constants.state.BINDING | constants.state.BOUND)
     this._error = null
     this._handle = null
     this._address = null
 
     if (err) this.emit('error', err)
-    else this.emit('close')
+
+    this._closeMaybe()
   }
 }
 
@@ -765,7 +852,7 @@ exports.createConnection = function createConnection(port, host, opts, onconnect
   }
 
   if (typeof port === 'object' && port !== null) {
-    opts = port || {}
+    opts = port
     port = opts.port || 0
     host = opts.host || 'localhost'
   }
@@ -784,6 +871,71 @@ exports.socketpair = function socketpair() {
   return binding.socketpair()
 }
 
+function resolvedHostError(address) {
+  if (typeof address !== 'string') {
+    return errors.INVALID_HOST(`Resolved address must be a string, got ${typeof address}`)
+  }
+
+  if (ip.isIP(address) === 0) {
+    return errors.INVALID_HOST(`Resolved address must be an IP address, got "${address}"`)
+  }
+
+  const length = Buffer.byteLength(address)
+
+  if (length > constants.address.MAX_LENGTH) {
+    return errors.INVALID_HOST(
+      `Resolved address must be at most ${constants.address.MAX_LENGTH} bytes, got ${length}`
+    )
+  }
+
+  return null
+}
+
+function lookupError(addresses, host) {
+  if (!Array.isArray(addresses)) {
+    return errors.INVALID_HOST(`Resolved addresses must be an array, got ${typeof addresses}`)
+  }
+
+  if (addresses.length === 0) {
+    const err = new Error(`No address found for host "${host}"`)
+    err.code = 'ENOTFOUND'
+
+    return err
+  }
+
+  for (const entry of addresses) {
+    if (typeof entry !== 'object' || entry === null) {
+      return errors.INVALID_HOST(`Resolved addresses must contain objects, got ${typeof entry}`)
+    }
+
+    const err = resolvedHostError(entry.address)
+
+    if (err) return err
+  }
+
+  return null
+}
+
+function validateHost(host, name) {
+  if (typeof host !== 'string') {
+    throw errors.INVALID_HOST(`${name} must be a string, got ${typeof host}`)
+  }
+
+  if (ip.isIP(host) === 0) return
+
+  validateAddressLength(host, name)
+}
+
+function validateAddressLength(address, name) {
+  const length = Buffer.byteLength(address)
+
+  if (length > constants.address.MAX_LENGTH) {
+    throw errors.INVALID_HOST(
+      `${name} must be at most ${constants.address.MAX_LENGTH} bytes, got ${length}`
+    )
+  }
+}
+
 function validatePort(port) {
   if (typeof port !== 'number') {
     throw errors.INVALID_PORT(`Port must be a number, got ${typeof port}`)
@@ -791,6 +943,30 @@ function validatePort(port) {
 
   if (!Number.isInteger(port) || port < 0 || port > 0xffff) {
     throw errors.INVALID_PORT(`Port must be an integer between 0 and 65535, got ${port}`)
+  }
+}
+
+function validateFd(fd) {
+  if (typeof fd !== 'number') {
+    throw errors.INVALID_FD(`File descriptor must be a number, got ${typeof fd}`)
+  }
+
+  if (!Number.isInteger(fd) || fd < 0 || fd > 0x7fffffff) {
+    throw errors.INVALID_FD(
+      `File descriptor must be an integer between 0 and ${0x7fffffff}, got ${fd}`
+    )
+  }
+}
+
+function validateInteger(value, name, min, max) {
+  if (typeof value !== 'number') {
+    throw errors.INVALID_ARGUMENT(`${name} must be a number, got ${typeof value}`)
+  }
+
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw errors.INVALID_ARGUMENT(
+      `${name} must be an integer between ${min} and ${max}, got ${value}`
+    )
   }
 }
 

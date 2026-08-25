@@ -22,7 +22,7 @@ interface TCPSocketAddress {
 interface TCPSocketEvents extends DuplexEvents {
   connect: []
   lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
-  timeout: [ms: number]
+  timeout: []
 }
 
 interface TCPSocketOptions {
@@ -34,10 +34,18 @@ interface TCPSocketOptions {
 interface TCPSocketConnectOptions extends LookupOptions {
   lookup?: DNSLookup
   host?: string
-  keepAlive?: boolean
-  keepAliveInitialDelay?: boolean
+  keepAlive?: boolean | number
+  keepAliveInitialDelay?: number
   noDelay?: boolean
   port?: number
+  timeout?: number
+}
+
+interface TCPSocketOpenOptions {
+  fd?: number
+  keepAlive?: boolean | number
+  keepAliveInitialDelay?: number
+  noDelay?: boolean
   timeout?: number
 }
 
@@ -46,6 +54,9 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly pending: boolean
   readonly timeout?: number
   readonly readyState: 'open' | 'opening'
+  readonly keepAlive: boolean
+  readonly keepAliveInitialDelay: number
+  readonly noDelay: boolean
   readonly localAddress?: string
   readonly localFamily?: string
   readonly localPort?: number
@@ -56,11 +67,11 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
   connect(port: number, host: string, onconnect: () => void): this
   connect(port: number, onconnect: () => void): this
-  connect(opts: TCPSocketConnectOptions): this
+  connect(opts: TCPSocketConnectOptions, onconnect?: () => void): this
 
-  open(fd: number, opts?: { fd?: number }, onconnect?: () => void): this
+  open(fd: number, opts?: TCPSocketOpenOptions, onconnect?: () => void): this
   open(fd: number, onconnect: () => void): this
-  open(opts: { fd: number }, onconnect?: () => void): this
+  open(opts: TCPSocketOpenOptions & { fd: number }, onconnect?: () => void): this
 
   setKeepAlive(enable?: boolean, delay?: number): this
   setKeepAlive(delay: number): this
@@ -96,9 +107,9 @@ interface TCPServerEvents extends EventMap {
 }
 
 interface TCPServerOptions {
-  allowHalfOpen?: number
-  keepAlive?: boolean
-  keepAliveInitialDelay?: boolean
+  allowHalfOpen?: boolean
+  keepAlive?: boolean | number
+  keepAliveInitialDelay?: number
   maxConnections?: number
   noDelay?: boolean
   pauseOnConnect?: boolean
@@ -118,7 +129,7 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
   readonly connections: Set<TCPSocket>
   maxConnections: number
 
-  address(): TCPSocketAddress
+  address(): TCPSocketAddress | null
 
   listen(
     port?: number,
@@ -130,9 +141,10 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
   listen(port: number, host: string, backlog: number, onlistening: () => void): this
   listen(port: number, host: string, onlistening: () => void): this
   listen(port: number, onlistening: () => void): this
+  listen(opts: TCPServerListenOptions, onlistening?: () => void): this
   listen(onlistening: () => void): this
 
-  close(onclose?: (err?: Error) => void): this
+  close(onclose?: () => void): this
 
   ref(): this
   unref(): this
@@ -156,10 +168,8 @@ declare function createConnection(port: number, onconnect: () => void): TCPSocke
 
 declare function createConnection(
   opts: TCPSocketOptions & TCPSocketConnectOptions,
-  onconnect: () => void
+  onconnect?: () => void
 ): TCPSocket
-
-declare function createConnection(opts: TCPSocketOptions & TCPSocketConnectOptions): TCPSocket
 
 declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
 
@@ -189,12 +199,13 @@ export {
   isIP,
   isIPv4,
   isIPv6,
-  type TCPSocketAddress,
-  type TCPSocketEvents,
-  type TCPSocketOptions,
-  type TCPSocketConnectOptions,
   type TCPServerDropInfo,
   type TCPServerEvents,
+  type TCPServerListenOptions,
   type TCPServerOptions,
-  type TCPServerListenOptions
+  type TCPSocketAddress,
+  type TCPSocketConnectOptions,
+  type TCPSocketEvents,
+  type TCPSocketOpenOptions,
+  type TCPSocketOptions
 }
