@@ -1095,6 +1095,26 @@ test('server, listening is false after close', async (t) => {
   })
 })
 
+test('server, closing', async (t) => {
+  t.plan(3)
+
+  const server = tcp.createServer()
+
+  t.absent(server.closing, 'not closing before listening')
+
+  server.listen(0)
+
+  await waitForListening(server)
+
+  server.close()
+
+  t.ok(server.closing, 'closing as soon as close is called')
+
+  await new Promise((resolve) => server.on('close', resolve))
+
+  t.absent(server.closing, 'no longer closing once closed')
+})
+
 test('server, address while not listening', (t) => {
   const server = tcp.createServer()
   t.is(server.address(), null)
@@ -1255,21 +1275,33 @@ test('server, listen again after a port already in use', async (t) => {
 })
 
 test('server, listen after close', async (t) => {
-  t.plan(1)
+  t.plan(3)
 
-  const server = tcp.createServer().listen()
+  const server = tcp.createServer().listen(0)
+
+  await waitForListening(server)
+  await new Promise((resolve) => server.close(resolve))
+
+  t.absent(server.closing, 'no longer closing once closed')
+
+  // A fully closed server is reusable, as in Node.
+  server.listen(0)
 
   await waitForListening(server)
 
-  await new Promise((resolve) => server.close(resolve))
+  t.ok(server.listening, 'listening again')
+  t.ok(server.address().port > 0, 'bound to a new port')
 
-  t.exception(() => server.listen(), /SERVER_IS_CLOSED/)
+  await new Promise((resolve) => server.close(resolve))
 })
 
 test('server, listen after close while resolving host', async (t) => {
-  t.plan(1)
+  t.plan(2)
 
   const server = tcp.createServer()
+
+  let listening = 0
+  server.on('listening', () => listening++)
 
   server.listen(0, 'localhost', 511, {
     lookup(hostname, opts, cb) {
@@ -1278,8 +1310,54 @@ test('server, listen after close while resolving host', async (t) => {
   })
 
   await new Promise((resolve) => server.close(resolve))
+  await new Promise((resolve) => setImmediate(resolve))
 
-  t.exception(() => server.listen(), /SERVER_IS_CLOSED/)
+  // The close abandons the lookup, so it must not bind once it resolves.
+  t.is(listening, 0, 'the abandoned lookup did not listen')
+
+  server.listen(0)
+
+  await waitForListening(server)
+
+  t.ok(server.listening, 'listening again')
+
+  await new Promise((resolve) => server.close(resolve))
+})
+
+test('server, listen while closing', async (t) => {
+  t.plan(1)
+
+  const server = tcp.createServer().listen(0)
+
+  await waitForListening(server)
+
+  server.close()
+
+  t.exception(() => server.listen(0), /SERVER_IS_CLOSED/)
+
+  await new Promise((resolve) => server.on('close', resolve))
+})
+
+test('server, listen while connections drain', async (t) => {
+  t.plan(2)
+
+  const server = tcp.createServer()
+  server.listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const client = tcp.createConnection(server.address().port, '127.0.0.1')
+  const socket = await new Promise((resolve) => server.on('connection', resolve))
+
+  server.close()
+
+  t.ok(server.closing, 'closing while the connection drains')
+  t.exception(() => server.listen(0), /SERVER_IS_CLOSED/)
+
+  socket.destroy()
+  client.destroy()
+
+  await new Promise((resolve) => server.on('close', resolve))
 })
 
 test('server, maxConnections drops excess connections', async (t) => {
@@ -1451,6 +1529,27 @@ test('server, close releases the port before connections drain', async (t) => {
   await new Promise((resolve) => other.close(resolve))
 
   socket.destroy()
+})
+
+test('server, close after listening again', async (t) => {
+  t.plan(2)
+
+  const server = tcp.createServer().listen(0)
+
+  await waitForListening(server)
+  await new Promise((resolve) => server.close(resolve))
+
+  server.listen(0)
+
+  await waitForListening(server)
+
+  let closed = 0
+  server.on('close', () => closed++)
+
+  await new Promise((resolve) => server.close(resolve))
+
+  t.is(closed, 1, 'the second close closed the server')
+  t.absent(server.listening, 'not listening')
 })
 
 test('server, ref and unref', async (t) => {

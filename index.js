@@ -654,6 +654,7 @@ exports.Server = class TCPServer extends EventEmitter {
     validatePort(port)
 
     this._state |= constants.state.BINDING
+    this._state &= ~constants.state.CLOSED
 
     const { lookup = dns.lookup, hints } = opts
 
@@ -661,9 +662,9 @@ exports.Server = class TCPServer extends EventEmitter {
 
     if (type === 0) {
       lookup(host, { family, hints }, (err, address, family) => {
-        this._state &= ~constants.state.BINDING
+        if ((this._state & constants.state.BINDING) === 0) return
 
-        if (this._state & constants.state.CLOSING) return
+        this._state &= ~constants.state.BINDING
 
         if (!err) err = resolvedHostError(address)
 
@@ -732,7 +733,7 @@ exports.Server = class TCPServer extends EventEmitter {
 
     if (this._state & constants.state.CLOSING) return this
     this._state |= constants.state.CLOSING
-    this._state &= ~constants.state.BOUND
+    this._state &= ~(constants.state.BINDING | constants.state.BOUND)
 
     if (this._handle !== null) binding.close(this._handle)
     else this._closeMaybe()
@@ -762,6 +763,7 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._handle !== null || this._connections.size > 0) return
 
     this._state |= constants.state.CLOSED
+    this._state &= ~constants.state.CLOSING
 
     queueMicrotask(() => this.emit('close'))
   }
