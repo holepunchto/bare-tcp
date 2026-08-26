@@ -153,8 +153,8 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
 }
 
 declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
-  constructor(opts?: TCPServerOptions, onconnection?: () => void)
-  constructor(onconnection: () => void)
+  constructor(opts?: TCPServerOptions, onconnection?: (socket: TCPSocket) => void)
+  constructor(onconnection: (socket: TCPSocket) => void)
 }
 
 declare function createConnection(
@@ -173,9 +173,12 @@ declare function createConnection(
   onconnect?: () => void
 ): TCPSocket
 
-declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
+declare function createServer(
+  opts?: TCPServerOptions,
+  onconnection?: (socket: TCPSocket) => void
+): TCPServer
 
-declare function createServer(onconnection: () => void): TCPServer
+declare function createServer(onconnection: (socket: TCPSocket) => void): TCPServer
 
 declare function isIP(host: string): IPFamily | 0
 

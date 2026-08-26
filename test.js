@@ -1,5 +1,6 @@
 const test = require('brittle')
 const tcp = require('.')
+const binding = require('./binding')
 
 test('server + client', async (t) => {
   t.plan(2)
@@ -109,16 +110,18 @@ test('socket, state getters', async (t) => {
 })
 
 test('socket, readyState', async (t) => {
-  t.plan(5)
+  t.plan(6)
 
   const server = tcp.createServer((socket) => socket.end()).listen(0, '127.0.0.1')
 
   await waitForListening(server)
 
   const socket = new tcp.Socket()
-  t.is(socket.readyState, 'opening', 'opening before connect')
+  t.is(socket.readyState, 'closed', 'closed before connect, as in Node')
 
   socket.connect(server.address().port, '127.0.0.1')
+
+  t.is(socket.readyState, 'opening', 'opening while connecting')
 
   await waitFor(socket, 'connect')
 
@@ -307,6 +310,45 @@ test('socket, connect arguments', async (t) => {
   await args
 
   server.close()
+})
+
+test('socket, connect passes the family option to the lookup', async (t) => {
+  const families = t.test('families')
+  families.plan(4)
+
+  function lookup(label) {
+    return (host, opts, cb) => {
+      families.is(opts.family, 6, label)
+
+      queueMicrotask(() => cb(new Error('lookup failed')))
+    }
+  }
+
+  const a = new tcp.Socket().on('error', noop)
+  a.connect(1, 'test.invalid', { family: 6, lookup: lookup('port, host and options') })
+
+  const b = new tcp.Socket().on('error', noop)
+  b.connect({ port: 1, host: 'test.invalid', family: 6, lookup: lookup('options') })
+
+  const c = tcp
+    .createConnection(1, 'test.invalid', {
+      family: 6,
+      lookup: lookup('createConnection with port, host and options')
+    })
+    .on('error', noop)
+
+  const d = tcp
+    .createConnection({
+      port: 1,
+      host: 'test.invalid',
+      family: 6,
+      lookup: lookup('createConnection with options')
+    })
+    .on('error', noop)
+
+  await families
+
+  t.ok(c.destroying && d.destroying, 'the failed lookups destroyed the sockets')
 })
 
 test('socket, connect while already connecting or connected', async (t) => {
@@ -610,6 +652,53 @@ test('socket, connect without port or eager open', (t) => {
   socket.on('error', (err) => t.ok(err.code, `connecting to port 0 failed with ${err.code}`))
 })
 
+test('socket, connect validates the socket options before connecting', async (t) => {
+  t.plan(6)
+
+  const server = tcp.createServer((socket) => socket.end()).listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const { port } = server.address()
+
+  const socket = new tcp.Socket()
+
+  t.exception(
+    () => socket.connect(port, '127.0.0.1', { timeout: 1.5 }),
+    /INVALID_ARGUMENT/,
+    'timeout'
+  )
+
+  t.exception(
+    () => socket.connect(port, '127.0.0.1', { keepAlive: true, keepAliveInitialDelay: -1 }),
+    /INVALID_ARGUMENT/,
+    'keep alive initial delay'
+  )
+
+  // The host is resolved only once the options check out, so a hostname throws
+  // just the same rather than failing the connect from the lookup callback.
+  t.exception(
+    () =>
+      socket.connect(port, 'test.invalid', {
+        timeout: 1.5,
+        lookup: () => t.fail('should not have resolved')
+      }),
+    /INVALID_ARGUMENT/,
+    'timeout with a hostname'
+  )
+
+  t.absent(socket.connecting, 'the socket was left alone')
+
+  socket.connect(port, '127.0.0.1', () => {
+    t.pass('connects once the options are valid')
+
+    socket.destroy()
+    server.close()
+  })
+
+  t.ok(socket.connecting, 'connecting')
+})
+
 test('socket, connect after a failed connect', (t) => {
   t.plan(1)
 
@@ -727,6 +816,32 @@ test('socket, open with options', (t) => {
 
   left.destroy()
   right.destroy()
+})
+
+test('socket, open validates the socket options before adopting the fd', (t) => {
+  t.plan(4)
+
+  const [a, b] = tcp.socketpair()
+
+  const left = new tcp.Socket()
+  const right = new tcp.Socket().open(b)
+
+  t.exception(() => left.open(a, { timeout: 1.5 }), /INVALID_ARGUMENT/, 'timeout')
+
+  t.exception(
+    () => left.open(a, { keepAlive: true, keepAliveInitialDelay: -1 }),
+    /INVALID_ARGUMENT/,
+    'keep alive initial delay'
+  )
+
+  t.ok(left.pending, 'the file descriptor was not adopted')
+
+  left.open(a, () => {
+    t.pass('opens once the options are valid')
+
+    left.destroy()
+    right.destroy()
+  })
 })
 
 test('socket, open with an invalid fd', (t) => {
@@ -954,6 +1069,27 @@ test('socket, setTimeout validation', (t) => {
   socket.destroy()
 })
 
+test('socket, setTimeout of zero removes the timeout listener', (t) => {
+  const socket = new tcp.Socket()
+
+  const ontimeout = () => t.fail('should have been removed')
+
+  socket.setTimeout(50, ontimeout)
+  socket.setTimeout(0, ontimeout)
+
+  t.is(socket.listenerCount('timeout'), 0, 'listener removed, as in Node')
+
+  socket.setTimeout(50, ontimeout)
+
+  t.is(socket.listenerCount('timeout'), 1, 'listener added again')
+
+  socket.setTimeout(0)
+
+  t.is(socket.listenerCount('timeout'), 1, 'left alone when no listener is passed')
+
+  socket.destroy()
+})
+
 test('socket, setTimeout replaces the previous timeout', async (t) => {
   const sub = t.test()
   sub.plan(3)
@@ -1140,6 +1276,46 @@ test('socket, destroy with a write in flight', async (t) => {
   })
 })
 
+test('socket, close is emitted once the handle has closed', async (t) => {
+  t.plan(1)
+
+  const server = tcp.createServer((socket) => socket.resume()).listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const order = []
+
+  let socket = null
+
+  // The native close callback is captured when the socket is constructed, so it
+  // has to be replaced on the prototype before connecting.
+  const onclose = tcp.Socket.prototype._onclose
+
+  t.teardown(() => {
+    tcp.Socket.prototype._onclose = onclose
+  })
+
+  tcp.Socket.prototype._onclose = function () {
+    if (this === socket) order.push('handle')
+
+    return onclose.call(this)
+  }
+
+  socket = tcp.createConnection(server.address().port, '127.0.0.1')
+
+  await waitFor(socket, 'connect')
+
+  socket.on('close', () => order.push('close'))
+
+  socket.destroy()
+
+  await waitFor(socket, 'close')
+
+  t.alike(order, ['handle', 'close'], 'the handle is closed before close is emitted')
+
+  server.close()
+})
+
 test('socket, ref and unref', async (t) => {
   t.plan(3)
 
@@ -1271,12 +1447,60 @@ test('server, listen arguments with backlog and options', async (t) => {
   await args
 })
 
+test('server, listen passes the family option to the lookup', async (t) => {
+  const families = t.test('families')
+  families.plan(2)
+
+  function lookup(label) {
+    return (host, opts, cb) => {
+      families.is(opts.family, 6, label)
+
+      queueMicrotask(() => cb(new Error('lookup failed')))
+    }
+  }
+
+  const a = tcp.createServer().on('error', noop)
+  a.listen(0, 'test.invalid', 511, {
+    family: 6,
+    lookup: lookup('port, host, backlog and options')
+  })
+
+  const b = tcp.createServer().on('error', noop)
+  b.listen({ port: 0, host: 'test.invalid', family: 6, lookup: lookup('options') })
+
+  await families
+
+  a.close()
+  b.close()
+})
+
 test('server, listen with an out-of-range port', (t) => {
   const cases = [-1, 65536, 75535, 1.5, NaN, Infinity, 'foo']
 
   for (const port of cases) {
     t.exception(() => tcp.createServer().listen(port), /INVALID_PORT/, `listen(${String(port)})`)
   }
+})
+
+test('server, listen with a malformed host, port or backlog', (t) => {
+  const server = tcp.createServer()
+
+  t.exception(() => server.listen(0, 42), /INVALID_HOST/, 'host that is not a string')
+  t.exception(() => server.listen(0, '127.0.0.1', NaN), /INVALID_ARGUMENT/, 'backlog of NaN')
+  t.exception(
+    () => server.listen({ backlog: NaN }),
+    /INVALID_ARGUMENT/,
+    'backlog of NaN in options'
+  )
+  t.exception(() => server.listen({ port: NaN }), /INVALID_PORT/, 'port of NaN in options')
+
+  t.absent(server.listening, 'the server was left alone')
+
+  server.listen(0, '127.0.0.1', () => {
+    t.pass('listens once the arguments are valid')
+
+    server.close()
+  })
 })
 
 test('server, listen with a host longer than the maximum', (t) => {
@@ -1506,6 +1730,41 @@ test('server, listen while connections drain', async (t) => {
   await new Promise((resolve) => server.on('close', resolve))
 })
 
+test('server, connection that cannot be accepted', async (t) => {
+  t.plan(2)
+
+  const accept = binding.accept
+
+  t.teardown(() => {
+    binding.accept = accept
+  })
+
+  const server = tcp.createServer(() => t.fail('should not have been accepted'))
+
+  server.listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const errored = new Promise((resolve) => server.once('error', resolve))
+
+  binding.accept = () => {
+    throw new Error('cannot accept')
+  }
+
+  const socket = tcp.createConnection(server.address().port, '127.0.0.1').on('error', noop)
+
+  t.teardown(() => socket.destroy())
+
+  const err = await errored
+
+  binding.accept = accept
+
+  t.is(err.message, 'cannot accept', 'the server errors')
+  t.is(server.connections.size, 0, 'no connection is tracked')
+
+  server.close()
+})
+
 test('server, maxConnections drops excess connections', async (t) => {
   t.plan(4)
 
@@ -1632,6 +1891,22 @@ test('server, close twice', async (t) => {
   await new Promise((resolve) => setTimeout(resolve, 100))
 
   t.is(closed, 1, 'closed once')
+})
+
+test('server, close after having closed', async (t) => {
+  t.plan(2)
+
+  const server = tcp.createServer().listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  await new Promise((resolve) => server.close(resolve))
+
+  t.absent(server.closing, 'closed')
+
+  await new Promise((resolve) => server.close(resolve))
+
+  t.pass('closing again calls back without emitting close')
 })
 
 test('server, close while resolving host', (t) => {
@@ -1916,3 +2191,5 @@ function waitFor(emitter, event) {
     }
   })
 }
+
+function noop() {}

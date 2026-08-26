@@ -71,16 +71,16 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   get readyState() {
-    const readable = isReadable(this)
-    const writable = isWritable(this) && !isFinished(this)
+    if (this._state & constants.state.CONNECTING) return 'opening'
 
-    if ((this._state & constants.state.CONNECTED) === 0) {
-      return readable || writable ? 'opening' : 'closed'
+    if (this._state & constants.state.CONNECTED) {
+      const readable = isReadable(this)
+      const writable = isWritable(this) && !isFinished(this)
+
+      if (readable && writable) return 'open'
+      if (readable) return 'readOnly'
+      if (writable) return 'writeOnly'
     }
-
-    if (readable && writable) return 'open'
-    if (readable) return 'readOnly'
-    if (writable) return 'writeOnly'
 
     return 'closed'
   }
@@ -150,13 +150,10 @@ exports.Socket = class TCPSocket extends Duplex {
       opts = {}
     }
 
-    let family = 0
-
     if (typeof port === 'object' && port !== null) {
       opts = port
-      port = opts.port || 0
+      port = defaultTo(opts.port, 0)
       host = opts.host || 'localhost'
-      family = opts.family || 0
     }
 
     if (!host) host = 'localhost'
@@ -164,16 +161,21 @@ exports.Socket = class TCPSocket extends Duplex {
     validateHost(host, 'Host')
     validatePort(port)
 
-    this._state |= constants.state.CONNECTING
-
     const {
       lookup = dns.lookup,
       hints,
+      family = 0,
       keepAlive = false,
       keepAliveInitialDelay = 0,
       noDelay = false,
       timeout
     } = opts
+
+    if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
+    if (noDelay) this.setNoDelay(noDelay)
+    if (timeout) this.setTimeout(timeout)
+
+    this._state |= constants.state.CONNECTING
 
     const type = ip.isIP(host)
 
@@ -211,14 +213,8 @@ exports.Socket = class TCPSocket extends Duplex {
       return this
     }
 
-    family = type
-
     try {
-      binding.connect(this._handle, port, host, family)
-
-      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-      if (noDelay) this.setNoDelay(noDelay)
-      if (timeout) this.setTimeout(timeout)
+      binding.connect(this._handle, port, host, type)
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
@@ -251,6 +247,10 @@ exports.Socket = class TCPSocket extends Duplex {
 
     const { keepAlive = false, keepAliveInitialDelay = 0, noDelay = false, timeout } = opts
 
+    if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
+    if (noDelay) this.setNoDelay(noDelay)
+    if (timeout) this.setTimeout(timeout)
+
     try {
       binding.open(this._handle, fd)
 
@@ -258,9 +258,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
       this._state |= constants.state.CONNECTED
 
-      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-      if (noDelay) this.setNoDelay(noDelay)
-      if (timeout) this.setTimeout(timeout)
+      if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+      if (this._noDelay) this.setNoDelay(this._noDelay)
 
       if (onconnect) this.once('connect', onconnect)
 
@@ -320,7 +319,9 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._timer = null
 
-    if (ms !== 0) {
+    if (ms === 0) {
+      if (ontimeout) this.removeListener('timeout', ontimeout)
+    } else {
       if (ontimeout) this.once('timeout', ontimeout)
 
       this._timer = setTimeout(() => this.emit('timeout'), ms)
@@ -403,11 +404,13 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _destroy(err, cb) {
-    if (this._state & constants.state.CLOSING) return cb(err)
-    this._state |= constants.state.CLOSING
-    this._state &= ~constants.state.CONNECTING
+    if (this._state & constants.state.CLOSED) return cb(err)
 
     this._pendingDestroy = cb
+
+    if (this._state & constants.state.CLOSING) return
+    this._state |= constants.state.CLOSING
+    this._state &= ~constants.state.CONNECTING
 
     binding.close(this._handle)
   }
@@ -555,6 +558,8 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onclose() {
+    this._state |= constants.state.CLOSED
+
     clearTimeout(this._timer)
 
     this._continueOpen()
@@ -658,18 +663,15 @@ exports.Server = class TCPServer extends EventEmitter {
       opts = {}
     }
 
-    let family = 0
-
     if (typeof port === 'object' && port !== null) {
       opts = port
-      port = opts.port || 0
+      port = defaultTo(opts.port, 0)
       host = opts.host || 'localhost'
-      family = opts.family || 0
-      backlog = opts.backlog || 511
+      backlog = defaultTo(opts.backlog, 511)
     }
 
     if (!host) host = 'localhost'
-    if (!backlog) backlog = 511
+    if (backlog === null || backlog === 0) backlog = 511
 
     validateHost(host, 'Host')
     validateInteger(backlog, 'Backlog', 0, 0x7fffffff)
@@ -680,7 +682,7 @@ exports.Server = class TCPServer extends EventEmitter {
 
     const attempt = ++this._attempt
 
-    const { lookup = dns.lookup, hints } = opts
+    const { lookup = dns.lookup, hints, family = 0 } = opts
 
     const type = ip.isIP(host)
 
@@ -706,8 +708,6 @@ exports.Server = class TCPServer extends EventEmitter {
       return this
     }
 
-    family = type
-
     this._handle = binding.init(
       empty,
       this,
@@ -723,7 +723,7 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     try {
-      binding.bind(this._handle, port, host, family, backlog)
+      binding.bind(this._handle, port, host, type, backlog)
 
       this._address = binding.address(this._handle, true)
 
@@ -881,7 +881,7 @@ exports.createConnection = function createConnection(port, host, opts, onconnect
 
   if (typeof port === 'object' && port !== null) {
     opts = port
-    port = opts.port || 0
+    port = defaultTo(opts.port, 0)
     host = opts.host || 'localhost'
   }
 
@@ -1010,6 +1010,10 @@ function validateInteger(value, name, min, max) {
       `${name} must be an integer between ${min} and ${max}, got ${value}`
     )
   }
+}
+
+function defaultTo(value, fallback) {
+  return value === undefined || value === null ? fallback : value
 }
 
 function noop() {}

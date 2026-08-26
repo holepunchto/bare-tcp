@@ -56,11 +56,11 @@ The timeout in milliseconds, or `undefined` if no timeout is set.
 
 The current state of the socket, as in Node:
 
-- `'opening'` if the socket has not yet connected.
+- `'opening'` if the socket is connecting.
 - `'open'` if both halves of the socket are open.
 - `'readOnly'` if the writable half has ended.
 - `'writeOnly'` if the readable half has ended.
-- `'closed'` otherwise.
+- `'closed'` otherwise, including before the socket connects.
 
 #### `socket.keepAlive`
 
@@ -100,7 +100,9 @@ The remote port of the socket, if connected.
 
 #### `socket.address()`
 
-Returns the local address as `{ address, family, port }`, or `null` if the socket is not connected. Unlike Node, which returns an empty object, this mirrors `server.address()`.
+Returns the local address as `{ address, family, port }`, or `null` if the socket has not connected. Unlike Node, which returns an empty object, this mirrors `server.address()`.
+
+The address is retained after the socket closes, as are `socket.localAddress`, `socket.remoteAddress`, and their companions, so that a closed socket can still be identified. Node clears them instead.
 
 #### `socket.connect(port[, host[, options]][, onconnect])`
 
@@ -123,6 +125,8 @@ options = {
 ```
 
 If `host` is a hostname, `options.lookup` is used to resolve it. By default, <https://github.com/holepunchto/bare-dns> is used. Set `options.family` to `4` or `6` to restrict the lookup to IPv4 or IPv6.
+
+The `keepAlive`, `noDelay`, and `timeout` options are applied before connecting, so an invalid one is thrown rather than reported as a failed connect, and the timeout covers resolving the host.
 
 A custom `lookup` must resolve to IP addresses, as a resolved address is used as the host of another connect or listen. A result that is not an IP address, or is not shaped like the result `bare-dns` returns, is reported as a failed lookup rather than resolved again.
 
@@ -172,6 +176,8 @@ Emitted when the socket connects.
 #### `event: 'lookup'`
 
 Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
+
+Unlike Node, which emits this once, it is emitted once per resolved address, as every address is tried in turn until one connects. A failed lookup is still emitted once, with `err` set.
 
 #### `event: 'timeout'`
 
