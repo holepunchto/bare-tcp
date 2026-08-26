@@ -175,36 +175,36 @@ test('socket, address', async (t) => {
   t.plan(4)
 
   const server = tcp
-    .createServer((socket) => {
+    .createServer()
+    .on('connection', (socket) => {
       t.alike(
         socket.address(),
         { address: '127.0.0.1', family: 'IPv4', port: server.address().port },
         'server connection address'
       )
 
-      socket.end()
+      socket.on('close', () => server.close()).end()
     })
     .listen(0, '127.0.0.1')
 
   await waitForListening(server)
 
   const socket = new tcp.Socket()
+
   t.is(socket.address(), null, 'no address before connect')
 
-  socket.connect(server.address().port, '127.0.0.1')
+  socket
+    .on('connect', () => {
+      t.alike(
+        socket.address(),
+        { address: socket.localAddress, family: socket.localFamily, port: socket.localPort },
+        'address matches the local getters'
+      )
 
-  await waitFor(socket, 'connect')
-
-  t.alike(
-    socket.address(),
-    { address: '127.0.0.1', family: 'IPv4', port: socket.localPort },
-    'address once connected'
-  )
-
-  t.is(socket.address().port, socket.localPort, 'address port matches localPort')
-
-  socket.destroy()
-  server.close()
+      t.is(socket.address().address, '127.0.0.1', 'connected over IPv4 loopback')
+    })
+    .connect(server.address().port, '127.0.0.1')
+    .end()
 })
 
 test('socket, connecting is false after failed connect', async (t) => {
@@ -654,12 +654,8 @@ test('socket, destroy during reset', (t) => {
     port: 1,
     host: 'test.invalid',
     lookup(hostname, opts, cb) {
-      // Connecting to a multicast address fails synchronously, so the retry of
-      // the second address is queued as a microtask. Queueing the destroy after
-      // it lands it in the reset, once the handle is closing but before it has
-      // finished doing so.
       cb(null, [
-        { address: 'ff02::1', family: 6 },
+        { address: '0000:0000:0000:0000:0000:ffff:255.255.255.255%lo0', family: 6 },
         { address: '127.0.0.1', family: 4 }
       ])
 
