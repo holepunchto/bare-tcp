@@ -110,7 +110,7 @@ bare_tcp__buffers(js_env_t *env, js_value_t *value, uv_buf_t **result, uint32_t 
 
   js_value_t **elements = malloc(sizeof(js_value_t *) * bufs_len);
 
-  if (bufs == NULL || elements == NULL) {
+  if ((bufs == NULL || elements == NULL) && bufs_len > 0) {
     free(bufs);
     free(elements);
 
@@ -425,17 +425,21 @@ bare_tcp__on_close(uv_handle_t *handle) {
     err = js_get_reference_value(env, tcp->on_reset, &on_reset);
     assert(err == 0);
 
-    err = uv_tcp_init(loop, &tcp->handle);
+    int status = uv_tcp_init(loop, &tcp->handle);
+
+    tcp->resetting = false;
+
+    if (status < 0) tcp->closing = true;
 
     js_value_t *argv[1];
 
-    if (err < 0) {
+    if (status < 0) {
       js_value_t *code;
-      err = js_create_string_utf8(env, (utf8_t *) uv_err_name(err), -1, &code);
+      err = js_create_string_utf8(env, (utf8_t *) uv_err_name(status), -1, &code);
       assert(err == 0);
 
       js_value_t *message;
-      err = js_create_string_utf8(env, (utf8_t *) uv_strerror(err), -1, &message);
+      err = js_create_string_utf8(env, (utf8_t *) uv_strerror(status), -1, &message);
       assert(err == 0);
 
       err = js_create_error(env, code, message, &argv[0]);
@@ -445,14 +449,14 @@ bare_tcp__on_close(uv_handle_t *handle) {
       assert(err == 0);
     }
 
-    tcp->resetting = false;
-
     js_call_function(env, ctx, on_reset, 1, argv, NULL);
 
-    err = js_close_handle_scope(env, scope);
-    assert(err == 0);
+    if (status >= 0) {
+      err = js_close_handle_scope(env, scope);
+      assert(err == 0);
 
-    return;
+      return;
+    }
   }
 
   js_value_t *on_close;

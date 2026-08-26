@@ -1,5 +1,5 @@
 const EventEmitter = require('bare-events')
-const { Duplex } = require('bare-stream')
+const { Duplex, isFinished, isReadable, isWritable } = require('bare-stream')
 const dns = require('bare-dns')
 const binding = require('./binding')
 const constants = require('./lib/constants')
@@ -71,11 +71,18 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   get readyState() {
-    if (this._state & constants.state.CONNECTED) {
-      return 'open'
+    const readable = isReadable(this)
+    const writable = isWritable(this) && !isFinished(this)
+
+    if ((this._state & constants.state.CONNECTED) === 0) {
+      return readable || writable ? 'opening' : 'closed'
     }
 
-    return 'opening'
+    if (readable && writable) return 'open'
+    if (readable) return 'readOnly'
+    if (writable) return 'writeOnly'
+
+    return 'closed'
   }
 
   get keepAlive() {
@@ -116,6 +123,14 @@ exports.Socket = class TCPSocket extends Duplex {
 
   get [ipcHandle]() {
     return this._handle
+  }
+
+  address() {
+    if (this._localAddress === null) return null
+
+    const { address, family, port } = this._localAddress
+
+    return { address, family: `IPv${family}`, port }
   }
 
   connect(port, host = 'localhost', opts = {}, onconnect) {
@@ -299,6 +314,8 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   setTimeout(ms, ontimeout) {
+    validateInteger(ms, 'Timeout', 0, 0x7fffffff)
+
     clearTimeout(this._timer)
 
     this._timer = null
@@ -373,7 +390,7 @@ exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.end(this._handle)
     } catch (err) {
-      this._continueFinal(err)
+      this._onfinal(err)
     }
   }
 
@@ -534,7 +551,7 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onfinal(err) {
-    this._continueFinal(err)
+    this._continueFinal(err === null || err.code === 'ENOTCONN' ? null : err)
   }
 
   _onclose() {
@@ -565,6 +582,7 @@ exports.Server = class TCPServer extends EventEmitter {
     } = opts
 
     validateInteger(readBufferSize, 'Read buffer size', 1, 0x7fffffff)
+    validateMaxConnections(maxConnections)
 
     this._state = 0
 
@@ -578,6 +596,8 @@ exports.Server = class TCPServer extends EventEmitter {
 
     this._address = null
     this._connections = new Set()
+
+    this._attempt = 0
 
     this._error = null
     this._handle = null
@@ -602,6 +622,8 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   set maxConnections(value) {
+    validateMaxConnections(value)
+
     this._maxConnections = value
   }
 
@@ -656,13 +678,15 @@ exports.Server = class TCPServer extends EventEmitter {
     this._state |= constants.state.BINDING
     this._state &= ~constants.state.CLOSED
 
+    const attempt = ++this._attempt
+
     const { lookup = dns.lookup, hints } = opts
 
     const type = ip.isIP(host)
 
     if (type === 0) {
       lookup(host, { family, hints }, (err, address, family) => {
-        if ((this._state & constants.state.BINDING) === 0) return
+        if (attempt !== this._attempt) return
 
         this._state &= ~constants.state.BINDING
 
@@ -734,6 +758,8 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.CLOSING) return this
     this._state |= constants.state.CLOSING
     this._state &= ~(constants.state.BINDING | constants.state.BOUND)
+
+    this._attempt++
 
     if (this._handle !== null) binding.close(this._handle)
     else this._closeMaybe()
@@ -945,6 +971,20 @@ function validatePort(port) {
 
   if (!Number.isInteger(port) || port < 0 || port > 0xffff) {
     throw errors.INVALID_PORT(`Port must be an integer between 0 and 65535, got ${port}`)
+  }
+}
+
+function validateMaxConnections(value) {
+  if (typeof value !== 'number') {
+    throw errors.INVALID_ARGUMENT(`Max connections must be a number, got ${typeof value}`)
+  }
+
+  if (value === Infinity) return
+
+  if (!Number.isInteger(value) || value < 0 || value > 0x7fffffff) {
+    throw errors.INVALID_ARGUMENT(
+      `Max connections must be a non-negative integer or Infinity, got ${value}`
+    )
   }
 }
 

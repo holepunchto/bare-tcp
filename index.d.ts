@@ -53,7 +53,7 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly connecting: boolean
   readonly pending: boolean
   readonly timeout?: number
-  readonly readyState: 'open' | 'opening'
+  readonly readyState: 'open' | 'opening' | 'readOnly' | 'writeOnly' | 'closed'
   readonly keepAlive: boolean
   readonly keepAliveInitialDelay: number
   readonly noDelay: boolean
@@ -63,6 +63,8 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly remoteAddress?: string
   readonly remoteFamily?: string
   readonly remotePort?: number
+
+  address(): TCPSocketAddress | null
 
   connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
   connect(port: number, host: string, onconnect: () => void): this

@@ -109,7 +109,7 @@ test('socket, state getters', async (t) => {
 })
 
 test('socket, readyState', async (t) => {
-  t.plan(2)
+  t.plan(5)
 
   const server = tcp.createServer((socket) => socket.end()).listen(0, '127.0.0.1')
 
@@ -118,12 +118,93 @@ test('socket, readyState', async (t) => {
   const socket = new tcp.Socket()
   t.is(socket.readyState, 'opening', 'opening before connect')
 
-  socket.connect(server.address().port, '127.0.0.1', () => {
-    t.is(socket.readyState, 'open', 'open once connected')
+  socket.connect(server.address().port, '127.0.0.1')
 
-    socket.destroy()
-    server.close()
-  })
+  await waitFor(socket, 'connect')
+
+  t.is(socket.readyState, 'open', 'open once connected')
+
+  // The peer ends, which ends the readable half and leaves the writable half
+  // open, as in Node.
+  socket.resume()
+
+  await waitFor(socket, 'end')
+
+  t.is(socket.readyState, 'writeOnly', 'write only once the peer has ended')
+
+  socket.end()
+
+  await waitFor(socket, 'close')
+
+  t.is(socket.readyState, 'closed', 'closed once destroyed')
+
+  server.close()
+
+  await waitFor(server, 'close')
+
+  const unconnected = new tcp.Socket()
+  unconnected.destroy()
+
+  await waitFor(unconnected, 'close')
+
+  t.is(unconnected.readyState, 'closed', 'closed without ever connecting')
+})
+
+test('socket, readyState is read only once the writable half has ended', async (t) => {
+  t.plan(1)
+
+  const server = tcp.createServer().listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const socket = tcp.createConnection(server.address().port, '127.0.0.1')
+
+  await waitFor(socket, 'connect')
+
+  socket.end()
+
+  await waitFor(socket, 'finish')
+
+  t.is(socket.readyState, 'readOnly', 'read only once the writable half has ended')
+
+  socket.destroy()
+  server.close()
+})
+
+test('socket, address', async (t) => {
+  t.plan(4)
+
+  const server = tcp
+    .createServer((socket) => {
+      t.alike(
+        socket.address(),
+        { address: '127.0.0.1', family: 'IPv4', port: server.address().port },
+        'server connection address'
+      )
+
+      socket.end()
+    })
+    .listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const socket = new tcp.Socket()
+  t.is(socket.address(), null, 'no address before connect')
+
+  socket.connect(server.address().port, '127.0.0.1')
+
+  await waitFor(socket, 'connect')
+
+  t.alike(
+    socket.address(),
+    { address: '127.0.0.1', family: 'IPv4', port: socket.localPort },
+    'address once connected'
+  )
+
+  t.is(socket.address().port, socket.localPort, 'address port matches localPort')
+
+  socket.destroy()
+  server.close()
 })
 
 test('socket, connecting is false after failed connect', async (t) => {
@@ -567,24 +648,29 @@ test('socket, destroy during reset', (t) => {
 
   const socket = new tcp.Socket()
 
-  const reset = socket._reset.bind(socket)
-
-  socket._reset = () => {
-    t.pass('reset')
-    reset()
-    socket.destroy()
-  }
-
   socket.on('close', () => t.pass('closed'))
 
   socket.connect({
     port: 1,
     host: 'test.invalid',
     lookup(hostname, opts, cb) {
+      // Connecting to a multicast address fails synchronously, so the retry of
+      // the second address is queued as a microtask. Queueing the destroy after
+      // it lands it in the reset, once the handle is closing but before it has
+      // finished doing so.
       cb(null, [
-        { address: '127.0.0.1', family: 4 },
+        { address: 'ff02::1', family: 6 },
         { address: '127.0.0.1', family: 4 }
       ])
+
+      queueMicrotask(() => {
+        // The reset clears the state of the failed attempt, which is what tells
+        // the two apart: the socket is still connecting if the attempt has yet
+        // to fail.
+        t.absent(socket.connecting, 'the failed attempt has been reset')
+
+        socket.destroy()
+      })
     }
   })
 })
@@ -851,6 +937,25 @@ test('socket, setTimeout of zero disables the timeout', async (t) => {
   await sub
 
   server.close()
+})
+
+test('socket, setTimeout validation', (t) => {
+  const socket = new tcp.Socket()
+
+  socket.setTimeout(50)
+
+  t.exception(() => socket.setTimeout('x'), /INVALID_ARGUMENT/, 'not a number')
+  t.exception(() => socket.setTimeout(-1), /INVALID_ARGUMENT/, 'negative')
+  t.exception(() => socket.setTimeout(NaN), /INVALID_ARGUMENT/, 'NaN')
+  t.exception(() => socket.setTimeout(1.5), /INVALID_ARGUMENT/, 'not an integer')
+
+  t.is(socket.timeout, 50, 'unchanged by the failed assignments')
+
+  socket.setTimeout(0)
+
+  t.is(socket.timeout, undefined, 'disabled')
+
+  socket.destroy()
 })
 
 test('socket, setTimeout replaces the previous timeout', async (t) => {
@@ -1324,6 +1429,51 @@ test('server, listen after close while resolving host', async (t) => {
   await new Promise((resolve) => server.close(resolve))
 })
 
+test('server, listen again while the abandoned lookup is still resolving', async (t) => {
+  t.plan(3)
+
+  // Hold a port so that binding it again fails, letting the abandoned listen
+  // be told apart from the one that replaced it.
+  const taken = tcp.createServer().listen(0, '127.0.0.1')
+
+  await waitForListening(taken)
+
+  const { port } = taken.address()
+
+  const server = tcp.createServer()
+
+  server.on('error', (err) => t.fail(`unexpected error: ${err.code}`))
+
+  let resolved = 0
+
+  function lookup(delay) {
+    return (hostname, opts, cb) => {
+      setTimeout(() => {
+        resolved++
+        cb(null, '127.0.0.1', 4)
+      }, delay)
+    }
+  }
+
+  // The first lookup outlives the close and resolves while the second one is
+  // still pending, so it must not bind on behalf of the second listen.
+  server.listen(port, 'first.invalid', 511, { lookup: lookup(50) })
+
+  await new Promise((resolve) => server.close(resolve))
+
+  server.listen(0, 'second.invalid', 511, { lookup: lookup(150) })
+
+  await waitForListening(server)
+
+  t.is(resolved, 2, 'both lookups resolved')
+  t.not(server.address().port, port, 'bound by the second listen')
+  t.ok(server.listening, 'listening')
+
+  await new Promise((resolve) => server.close(resolve))
+
+  taken.close()
+})
+
 test('server, listen while closing', async (t) => {
   t.plan(1)
 
@@ -1398,6 +1548,38 @@ test('server, maxConnections is mutable', (t) => {
   t.is(server.maxConnections, Infinity, 'defaults to Infinity')
   server.maxConnections = 10
   t.is(server.maxConnections, 10, 'settable')
+})
+
+test('server, maxConnections validation', (t) => {
+  t.exception(
+    () => tcp.createServer({ maxConnections: 'x' }),
+    /INVALID_ARGUMENT/,
+    'not a number in options'
+  )
+
+  t.exception(
+    () => tcp.createServer({ maxConnections: -1 }),
+    /INVALID_ARGUMENT/,
+    'negative in options'
+  )
+
+  const server = tcp.createServer()
+
+  t.exception(() => (server.maxConnections = 'x'), /INVALID_ARGUMENT/, 'not a number')
+  t.exception(() => (server.maxConnections = -1), /INVALID_ARGUMENT/, 'negative')
+  t.exception(() => (server.maxConnections = 1.5), /INVALID_ARGUMENT/, 'not an integer')
+  t.exception(() => (server.maxConnections = NaN), /INVALID_ARGUMENT/, 'NaN')
+
+  t.is(server.maxConnections, Infinity, 'unchanged by the failed assignments')
+
+  server.maxConnections = 0
+  t.is(server.maxConnections, 0, 'zero')
+
+  server.maxConnections = 8
+  t.is(server.maxConnections, 8, 'positive integer')
+
+  server.maxConnections = Infinity
+  t.is(server.maxConnections, Infinity, 'infinity')
 })
 
 test('server, maxConnections of zero is unlimited', async (t) => {

@@ -54,7 +54,13 @@ The timeout in milliseconds, or `undefined` if no timeout is set.
 
 #### `socket.readyState`
 
-The current state of the socket. Either `'open'` or `'opening'`.
+The current state of the socket, as in Node:
+
+- `'opening'` if the socket has not yet connected.
+- `'open'` if both halves of the socket are open.
+- `'readOnly'` if the writable half has ended.
+- `'writeOnly'` if the readable half has ended.
+- `'closed'` otherwise.
 
 #### `socket.keepAlive`
 
@@ -91,6 +97,10 @@ The remote IP family (`'IPv4'` or `'IPv6'`), if connected.
 #### `socket.remotePort`
 
 The remote port of the socket, if connected.
+
+#### `socket.address()`
+
+Returns the local address as `{ address, family, port }`, or `null` if the socket is not connected. Unlike Node, which returns an empty object, this mirrors `server.address()`.
 
 #### `socket.connect(port[, host[, options]][, onconnect])`
 
@@ -145,7 +155,7 @@ The option is applied once the socket is connected.
 
 #### `socket.setTimeout(ms[, ontimeout])`
 
-Set a timeout in milliseconds. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout.
+Set a timeout in milliseconds, as a non-negative integer. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout.
 
 #### `socket.ref()`
 
@@ -205,7 +215,7 @@ A `Set` of active connections.
 
 #### `server.maxConnections`
 
-The maximum number of concurrent connections. Further connections are dropped and a `drop` event is emitted. `0` or `Infinity` means no limit.
+The maximum number of concurrent connections, as a non-negative integer or `Infinity`. Further connections are dropped and a `drop` event is emitted. `0` or `Infinity` means no limit.
 
 #### `server.address()`
 
