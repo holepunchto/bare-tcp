@@ -1392,6 +1392,46 @@ test('socket, close is emitted once the handle has closed', async (t) => {
   server.close()
 })
 
+test('socket, destroying is set before close is emitted', async (t) => {
+  t.plan(7)
+
+  const server = tcp.createServer((socket) => socket.resume()).listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const socket = tcp.createConnection(server.address().port, '127.0.0.1')
+
+  await waitFor(socket, 'connect')
+
+  let closed = false
+
+  socket.on('close', () => {
+    closed = true
+  })
+
+  socket.destroy()
+
+  // `close` is only emitted once the handle has closed, which takes at least
+  // one turn of the loop, so `destroying` is the only synchronous signal that
+  // the socket is on its way out. Consumers that pool sockets have to check it
+  // rather than `destroyed`.
+  t.is(socket.destroying, true, 'destroying immediately after destroy')
+  t.is(socket.destroyed, false, 'not destroyed until the handle has closed')
+  t.is(socket.readyState, 'closed', 'closed immediately after destroy')
+  t.is(closed, false, 'close not emitted synchronously')
+
+  await new Promise((resolve) => setImmediate(resolve))
+
+  t.is(closed, false, 'close not emitted within the same turn of the loop')
+
+  await waitFor(socket, 'close')
+
+  t.is(socket.destroying, true, 'still destroying once closed')
+  t.is(socket.destroyed, true, 'destroyed once closed')
+
+  server.close()
+})
+
 test('socket, ref and unref', async (t) => {
   t.plan(3)
 
@@ -2422,7 +2462,9 @@ test('server, keep alive is coerced to a boolean', async (t) => {
 
   const socket = tcp.createConnection(server.address().port, '127.0.0.1')
 
-  await waitFor(socket, 'connect')
+  // The client may see 'connect' while the connection is still sitting in the
+  // backlog, so closing on that would race the server ever accepting it.
+  await waitFor(server, 'connection')
 
   socket.destroy()
 
@@ -2463,12 +2505,24 @@ function waitForListening(server) {
 
 function waitFor(emitter, event) {
   return new Promise((resolve, reject) => {
-    emitter.on(event, done).on('error', done)
+    emitter.on(event, onevent).on('error', onerror)
 
-    function done(err) {
-      emitter.off(event, done).off('error', done)
+    // The event may carry a payload of its own, such as the socket passed to
+    // 'connection', so only 'error' can be taken for a failure.
+    function onevent(value) {
+      done()
 
-      err ? reject(err) : resolve()
+      resolve(value)
+    }
+
+    function onerror(err) {
+      done()
+
+      reject(err)
+    }
+
+    function done() {
+      emitter.off(event, onevent).off('error', onerror)
     }
   })
 }
