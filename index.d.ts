@@ -32,7 +32,7 @@ interface TCPSocketEvents extends DuplexEvents {
    */
   lookup: [err: Error | null, address: string | null, family: IPFamily | 0, host: string]
   /** Emitted when the socket times out due to inactivity. */
-  timeout: [ms: number]
+  timeout: []
 }
 
 /** Options for a `TCPSocket`. */
@@ -52,16 +52,24 @@ interface TCPSocketConnectOptions extends LookupOptions {
   /** The host to connect to. Defaults to `'localhost'`. */
   host?: string
   /** Enable keep-alive on the socket once connected. Defaults to `false`. */
-  keepAlive?: boolean
+  keepAlive?: boolean | number
   /**
    * The initial delay in milliseconds before the first keep-alive probe is sent. Defaults to `0`.
    */
-  keepAliveInitialDelay?: boolean
+  keepAliveInitialDelay?: number
   /** Send data immediately without buffering, disabling Nagle's algorithm. Defaults to `false`. */
   noDelay?: boolean
   /** The port to connect to. */
   port?: number
   /** An inactivity timeout in milliseconds, set on the socket once connected. */
+  timeout?: number
+}
+
+interface TCPSocketOpenOptions {
+  fd?: number
+  keepAlive?: boolean | number
+  keepAliveInitialDelay?: number
+  noDelay?: boolean
   timeout?: number
 }
 
@@ -72,8 +80,11 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly pending: boolean
   /** The timeout in milliseconds, or `undefined` if no timeout is set. */
   readonly timeout?: number
-  /** The current state of the socket. Either `'open'` or `'opening'`. */
-  readonly readyState: 'open' | 'opening'
+  /** The current state of the socket. */
+  readonly readyState: 'open' | 'opening' | 'readOnly' | 'writeOnly' | 'closed'
+  readonly keepAlive: boolean
+  readonly keepAliveInitialDelay: number
+  readonly noDelay: boolean
   /** The local IP address of the socket, if connected. */
   readonly localAddress?: string
   /** The local IP family (`'IPv4'` or `'IPv6'`), if connected. */
@@ -86,6 +97,8 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly remoteFamily?: string
   /** The remote port of the socket, if connected. */
   readonly remotePort?: number
+
+  address(): TCPSocketAddress | null
 
   /**
    * Connect the socket to `port` on `host`. If `host` is not provided, it defaults to
@@ -101,7 +114,7 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
   connect(port: number, host: string, onconnect: () => void): this
   connect(port: number, onconnect: () => void): this
-  connect(opts: TCPSocketConnectOptions): this
+  connect(opts: TCPSocketConnectOptions, onconnect?: () => void): this
 
   /**
    * Open the socket on the file descriptor of an existing TCP connection, emitting `'connect'` once
@@ -110,9 +123,9 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
    * @param opts - `fd` may be given here instead of as the first argument.
    * @param onconnect - Called once when the socket emits `'connect'`.
    */
-  open(fd: number, opts?: { fd?: number }, onconnect?: () => void): this
+  open(fd: number, opts?: TCPSocketOpenOptions, onconnect?: () => void): this
   open(fd: number, onconnect: () => void): this
-  open(opts: { fd: number }, onconnect?: () => void): this
+  open(opts: TCPSocketOpenOptions & { fd: number }, onconnect?: () => void): this
 
   /**
    * Enable or disable keep-alive. `delay` is the initial delay in milliseconds before the first
@@ -187,13 +200,13 @@ interface TCPServerOptions {
    * Keep the writable side of each incoming socket open after the readable side ends. Defaults to
    * `true`.
    */
-  allowHalfOpen?: number
+  allowHalfOpen?: boolean
   /** Enable keep-alive on each incoming socket. Defaults to `false`. */
-  keepAlive?: boolean
+  keepAlive?: boolean | number
   /**
    * The initial delay in milliseconds before the first keep-alive probe is sent. Defaults to `0`.
    */
-  keepAliveInitialDelay?: boolean
+  keepAliveInitialDelay?: number
   /**
    * The maximum number of concurrent connections; connections beyond it are dropped. Defaults to
    * `Infinity`.
@@ -241,7 +254,7 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
    * @returns The bound address as `{ address, family, port }`, or `null` if the server is not
    * listening.
    */
-  address(): TCPSocketAddress
+  address(): TCPSocketAddress | null
 
   /**
    * Start listening for connections on `port` and `host`. If `port` is `0`, an available port is
@@ -266,6 +279,7 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
   listen(port: number, host: string, backlog: number, onlistening: () => void): this
   listen(port: number, host: string, onlistening: () => void): this
   listen(port: number, onlistening: () => void): this
+  listen(opts: TCPServerListenOptions, onlistening?: () => void): this
   listen(onlistening: () => void): this
 
   /**
@@ -274,7 +288,7 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
    * @param onclose - Called once when the server emits `'close'`, after all existing connections
    * have ended.
    */
-  close(onclose?: (err?: Error) => void): this
+  close(onclose?: () => void): this
 
   /** Ref the server, preventing the process from exiting. */
   ref(): this
@@ -287,8 +301,8 @@ declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends Eve
    * Create a new TCP server. If `onconnection` is provided, it is added as a listener for the
    * `connection` event.
    */
-  constructor(opts?: TCPServerOptions, onconnection?: () => void)
-  constructor(onconnection: () => void)
+  constructor(opts?: TCPServerOptions, onconnection?: (socket: TCPSocket) => void)
+  constructor(onconnection: (socket: TCPSocket) => void)
 }
 
 /**
@@ -312,10 +326,8 @@ declare function createConnection(port: number, onconnect: () => void): TCPSocke
 
 declare function createConnection(
   opts: TCPSocketOptions & TCPSocketConnectOptions,
-  onconnect: () => void
+  onconnect?: () => void
 ): TCPSocket
-
-declare function createConnection(opts: TCPSocketOptions & TCPSocketConnectOptions): TCPSocket
 
 /**
  * Create a new TCP server. `server` extends <https://github.com/holepunchto/bare-events>.
@@ -323,9 +335,12 @@ declare function createConnection(opts: TCPSocketOptions & TCPSocketConnectOptio
  * `allowHalfOpen` to `true`, and `keepAlive`, `noDelay`, and `pauseOnConnect` to `false`.
  * @param onconnection - Called on each `'connection'` event.
  */
-declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
+declare function createServer(
+  opts?: TCPServerOptions,
+  onconnection?: (socket: TCPSocket) => void
+): TCPServer
 
-declare function createServer(onconnection: () => void): TCPServer
+declare function createServer(onconnection: (socket: TCPSocket) => void): TCPServer
 
 /**
  * Returns `4` if `host` is an IPv4 address, `6` if it is an IPv6 address, or `0` otherwise.
@@ -367,12 +382,13 @@ export {
   isIP,
   isIPv4,
   isIPv6,
-  type TCPSocketAddress,
-  type TCPSocketEvents,
-  type TCPSocketOptions,
-  type TCPSocketConnectOptions,
   type TCPServerDropInfo,
   type TCPServerEvents,
+  type TCPServerListenOptions,
   type TCPServerOptions,
-  type TCPServerListenOptions
+  type TCPSocketAddress,
+  type TCPSocketConnectOptions,
+  type TCPSocketEvents,
+  type TCPSocketOpenOptions,
+  type TCPSocketOptions
 }
