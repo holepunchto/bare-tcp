@@ -54,7 +54,13 @@ The timeout in milliseconds, or `undefined` if no timeout is set.
 
 #### `socket.readyState`
 
-The current state of the socket. Either `'open'` or `'opening'`.
+The current state of the socket, as in Node:
+
+- `'opening'` if the socket is connecting.
+- `'open'` if both halves of the socket are open.
+- `'readOnly'` if the writable half has ended.
+- `'writeOnly'` if the readable half has ended.
+- `'closed'` otherwise, including before the socket connects.
 
 #### `socket.keepAlive`
 
@@ -92,6 +98,12 @@ The remote IP family (`'IPv4'` or `'IPv6'`), if connected.
 
 The remote port of the socket, if connected.
 
+#### `socket.address()`
+
+Returns the local address as `{ address, family, port }`, or `null` if the socket has not connected. Unlike Node, which returns an empty object, this mirrors `server.address()`.
+
+The address is retained after the socket closes, as are `socket.localAddress`, `socket.remoteAddress`, and their companions, so that a closed socket can still be identified. Node clears them instead.
+
 #### `socket.connect(port[, host[, options]][, onconnect])`
 
 Connect the socket to `port` on `host`. If `host` is not provided, it defaults to `'localhost'`. `onconnect` is called when the connection is established.
@@ -113,6 +125,8 @@ options = {
 ```
 
 If `host` is a hostname, `options.lookup` is used to resolve it. By default, <https://github.com/holepunchto/bare-dns> is used. Set `options.family` to `4` or `6` to restrict the lookup to IPv4 or IPv6.
+
+The `keepAlive`, `noDelay`, and `timeout` options are applied before connecting, so an invalid one is thrown rather than reported as a failed connect, and the timeout covers resolving the host.
 
 A custom `lookup` must resolve to IP addresses, as a resolved address is used as the host of another connect or listen. A result that is not an IP address, or is not shaped like the result `bare-dns` returns, is reported as a failed lookup rather than resolved again.
 
@@ -145,7 +159,7 @@ The option is applied once the socket is connected.
 
 #### `socket.setTimeout(ms[, ontimeout])`
 
-Set a timeout in milliseconds. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout.
+Set a timeout in milliseconds, as a non-negative integer. When the socket is idle for `ms` milliseconds, a `timeout` event is emitted. Pass `0` to disable the timeout.
 
 #### `socket.ref()`
 
@@ -162,6 +176,8 @@ Emitted when the socket connects.
 #### `event: 'lookup'`
 
 Emitted after resolving the hostname. The arguments are `err`, `address`, `family`, and `host`.
+
+Unlike Node, which emits this once, it is emitted once per resolved address, as every address is tried in turn until one connects. A failed lookup is still emitted once, with `err` set.
 
 #### `event: 'timeout'`
 
@@ -205,7 +221,7 @@ A `Set` of active connections.
 
 #### `server.maxConnections`
 
-The maximum number of concurrent connections. Further connections are dropped and a `drop` event is emitted. `0` or `Infinity` means no limit.
+The maximum number of concurrent connections, as a non-negative integer or `Infinity`. Further connections are dropped and a `drop` event is emitted. `0` or `Infinity` means no limit.
 
 #### `server.address()`
 

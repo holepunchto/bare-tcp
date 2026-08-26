@@ -1,5 +1,5 @@
 const EventEmitter = require('bare-events')
-const { Duplex } = require('bare-stream')
+const { Duplex, isFinished, isReadable, isWritable } = require('bare-stream')
 const dns = require('bare-dns')
 const binding = require('./binding')
 const constants = require('./lib/constants')
@@ -18,11 +18,11 @@ exports.Socket = class TCPSocket extends Duplex {
 
     validateInteger(readBufferSize, 'Read buffer size', 1, 0x7fffffff)
 
-    super({ eagerOpen })
+    super({ eagerOpen: !!eagerOpen })
 
     this._state = 0
 
-    this._allowHalfOpen = allowHalfOpen
+    this._allowHalfOpen = !!allowHalfOpen
 
     this._keepAlive = false
     this._keepAliveInitialDelay = 0
@@ -63,6 +63,8 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   get pending() {
+    if (this._state & (constants.state.CLOSING | constants.state.CLOSED)) return true
+
     return (this._state & constants.state.CONNECTED) === 0
   }
 
@@ -71,11 +73,18 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   get readyState() {
+    if (this._state & constants.state.CONNECTING) return 'opening'
+
     if (this._state & constants.state.CONNECTED) {
-      return 'open'
+      const readable = isReadable(this)
+      const writable = isWritable(this) && !isFinished(this)
+
+      if (readable && writable) return 'open'
+      if (readable) return 'readOnly'
+      if (writable) return 'writeOnly'
     }
 
-    return 'opening'
+    return 'closed'
   }
 
   get keepAlive() {
@@ -118,6 +127,14 @@ exports.Socket = class TCPSocket extends Duplex {
     return this._handle
   }
 
+  address() {
+    if (this._localAddress === null) return null
+
+    const { address, family, port } = this._localAddress
+
+    return { address, family: `IPv${family}`, port }
+  }
+
   connect(port, host = 'localhost', opts = {}, onconnect) {
     if (this._state & constants.state.CLOSING) {
       throw errors.SOCKET_IS_CLOSED('Socket is closed')
@@ -135,13 +152,10 @@ exports.Socket = class TCPSocket extends Duplex {
       opts = {}
     }
 
-    let family = 0
-
     if (typeof port === 'object' && port !== null) {
       opts = port
-      port = opts.port || 0
+      port = defaultTo(opts.port, 0)
       host = opts.host || 'localhost'
-      family = opts.family || 0
     }
 
     if (!host) host = 'localhost'
@@ -149,16 +163,21 @@ exports.Socket = class TCPSocket extends Duplex {
     validateHost(host, 'Host')
     validatePort(port)
 
-    this._state |= constants.state.CONNECTING
-
     const {
       lookup = dns.lookup,
       hints,
+      family = 0,
       keepAlive = false,
       keepAliveInitialDelay = 0,
       noDelay = false,
       timeout
     } = opts
+
+    if (keepAlive) this.setKeepAlive(true, keepAliveInitialDelay)
+    if (noDelay) this.setNoDelay(true)
+    if (timeout) this.setTimeout(timeout)
+
+    this._state |= constants.state.CONNECTING
 
     const type = ip.isIP(host)
 
@@ -196,14 +215,8 @@ exports.Socket = class TCPSocket extends Duplex {
       return this
     }
 
-    family = type
-
     try {
-      binding.connect(this._handle, port, host, family)
-
-      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-      if (noDelay) this.setNoDelay(noDelay)
-      if (timeout) this.setTimeout(timeout)
+      binding.connect(this._handle, port, host, type)
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
@@ -236,6 +249,10 @@ exports.Socket = class TCPSocket extends Duplex {
 
     const { keepAlive = false, keepAliveInitialDelay = 0, noDelay = false, timeout } = opts
 
+    if (keepAlive) this.setKeepAlive(true, keepAliveInitialDelay)
+    if (noDelay) this.setNoDelay(true)
+    if (timeout) this.setTimeout(timeout)
+
     try {
       binding.open(this._handle, fd)
 
@@ -243,25 +260,26 @@ exports.Socket = class TCPSocket extends Duplex {
 
       this._state |= constants.state.CONNECTED
 
-      if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-      if (noDelay) this.setNoDelay(noDelay)
-      if (timeout) this.setTimeout(timeout)
+      if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+      if (this._noDelay) this.setNoDelay(this._noDelay)
 
       if (onconnect) this.once('connect', onconnect)
-
-      this._continueOpen()
-
-      queueMicrotask(() => {
-        if (this._state & constants.state.CLOSING) return
-
-        this.emit('connect')
-      })
     } catch (err) {
       queueMicrotask(() => {
         if (this._pendingOpen) this._continueOpen(err)
         else this.destroy(err)
       })
+
+      return this
     }
+
+    this._continueOpen()
+
+    queueMicrotask(() => {
+      if (this._state & constants.state.CLOSING) return
+
+      this.emit('connect')
+    })
 
     return this
   }
@@ -299,11 +317,15 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   setTimeout(ms, ontimeout) {
+    validateInteger(ms, 'Timeout', 0, 0x7fffffff)
+
     clearTimeout(this._timer)
 
     this._timer = null
 
-    if (ms !== 0) {
+    if (ms === 0) {
+      if (ontimeout) this.removeListener('timeout', ontimeout)
+    } else {
       if (ontimeout) this.once('timeout', ontimeout)
 
       this._timer = setTimeout(() => this.emit('timeout'), ms)
@@ -358,6 +380,8 @@ exports.Socket = class TCPSocket extends Duplex {
     this._pendingWriteBatch = batch
 
     try {
+      coerceBatch(batch)
+
       binding.writev(
         this._handle,
         batch.map(({ chunk }) => chunk)
@@ -373,7 +397,7 @@ exports.Socket = class TCPSocket extends Duplex {
     try {
       binding.end(this._handle)
     } catch (err) {
-      this._continueFinal(err)
+      this._onfinal(err)
     }
   }
 
@@ -386,11 +410,13 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _destroy(err, cb) {
-    if (this._state & constants.state.CLOSING) return cb(err)
-    this._state |= constants.state.CLOSING
-    this._state &= ~constants.state.CONNECTING
+    if (this._state & constants.state.CLOSED) return cb(err)
 
     this._pendingDestroy = cb
+
+    if (this._state & constants.state.CLOSING) return
+    this._state |= constants.state.CLOSING
+    this._state &= ~constants.state.CONNECTING
 
     binding.close(this._handle)
   }
@@ -488,6 +514,9 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._state |= constants.state.CONNECTED
 
+    if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+    if (this._noDelay) this.setNoDelay(this._noDelay)
+
     this._continueOpen()
   }
 
@@ -534,10 +563,12 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   _onfinal(err) {
-    this._continueFinal(err)
+    this._continueFinal(err === null || err.code === 'ENOTCONN' ? null : err)
   }
 
   _onclose() {
+    this._state |= constants.state.CLOSED
+
     clearTimeout(this._timer)
 
     this._continueOpen()
@@ -565,19 +596,22 @@ exports.Server = class TCPServer extends EventEmitter {
     } = opts
 
     validateInteger(readBufferSize, 'Read buffer size', 1, 0x7fffffff)
+    validateMaxConnections(maxConnections)
 
     this._state = 0
 
     this._readBufferSize = readBufferSize
-    this._allowHalfOpen = allowHalfOpen
-    this._keepAlive = keepAlive
+    this._allowHalfOpen = !!allowHalfOpen
+    this._keepAlive = !!keepAlive
     this._keepAliveInitialDelay = keepAliveInitialDelay
-    this._noDelay = noDelay
-    this._pauseOnConnect = pauseOnConnect
+    this._noDelay = !!noDelay
+    this._pauseOnConnect = !!pauseOnConnect
     this._maxConnections = maxConnections
 
     this._address = null
     this._connections = new Set()
+
+    this._attempt = 0
 
     this._error = null
     this._handle = null
@@ -602,6 +636,8 @@ exports.Server = class TCPServer extends EventEmitter {
   }
 
   set maxConnections(value) {
+    validateMaxConnections(value)
+
     this._maxConnections = value
   }
 
@@ -636,18 +672,15 @@ exports.Server = class TCPServer extends EventEmitter {
       opts = {}
     }
 
-    let family = 0
-
     if (typeof port === 'object' && port !== null) {
       opts = port
-      port = opts.port || 0
+      port = defaultTo(opts.port, 0)
       host = opts.host || 'localhost'
-      family = opts.family || 0
-      backlog = opts.backlog || 511
+      backlog = defaultTo(opts.backlog, 511)
     }
 
     if (!host) host = 'localhost'
-    if (!backlog) backlog = 511
+    if (backlog === null || backlog === 0) backlog = 511
 
     validateHost(host, 'Host')
     validateInteger(backlog, 'Backlog', 0, 0x7fffffff)
@@ -656,13 +689,15 @@ exports.Server = class TCPServer extends EventEmitter {
     this._state |= constants.state.BINDING
     this._state &= ~constants.state.CLOSED
 
-    const { lookup = dns.lookup, hints } = opts
+    const attempt = ++this._attempt
+
+    const { lookup = dns.lookup, hints, family = 0 } = opts
 
     const type = ip.isIP(host)
 
     if (type === 0) {
       lookup(host, { family, hints }, (err, address, family) => {
-        if ((this._state & constants.state.BINDING) === 0) return
+        if (attempt !== this._attempt) return
 
         this._state &= ~constants.state.BINDING
 
@@ -682,8 +717,6 @@ exports.Server = class TCPServer extends EventEmitter {
       return this
     }
 
-    family = type
-
     this._handle = binding.init(
       empty,
       this,
@@ -699,7 +732,7 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
     try {
-      binding.bind(this._handle, port, host, family, backlog)
+      binding.bind(this._handle, port, host, type, backlog)
 
       this._address = binding.address(this._handle, true)
 
@@ -734,6 +767,8 @@ exports.Server = class TCPServer extends EventEmitter {
     if (this._state & constants.state.CLOSING) return this
     this._state |= constants.state.CLOSING
     this._state &= ~(constants.state.BINDING | constants.state.BOUND)
+
+    this._attempt++
 
     if (this._handle !== null) binding.close(this._handle)
     else this._closeMaybe()
@@ -784,13 +819,14 @@ exports.Server = class TCPServer extends EventEmitter {
       eagerOpen: !this._pauseOnConnect
     })
 
+    let info = null
     try {
       binding.accept(this._handle, socket._handle)
 
       socket._onaccept()
 
       if (overLimit) {
-        const info = {
+        info = {
           localAddress: socket.localAddress,
           localPort: socket.localPort,
           localFamily: socket.localFamily,
@@ -800,27 +836,26 @@ exports.Server = class TCPServer extends EventEmitter {
         }
 
         socket.destroy()
+      } else {
+        this._connections.add(socket)
 
-        this.emit('drop', info)
-        return
+        if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+        if (this._noDelay) socket.setNoDelay(this._noDelay)
+
+        socket.on('close', () => {
+          this._connections.delete(socket)
+          this._closeMaybe()
+        })
       }
-
-      this._connections.add(socket)
-
-      if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
-      if (this._noDelay) socket.setNoDelay(this._noDelay)
-
-      socket.on('close', () => {
-        this._connections.delete(socket)
-        this._closeMaybe()
-      })
-
-      this.emit('connection', socket)
     } catch (err) {
       socket.destroy()
 
       this.emit('error', err)
+      return
     }
+
+    if (info !== null) this.emit('drop', info)
+    else this.emit('connection', socket)
   }
 
   _onclose() {
@@ -855,7 +890,7 @@ exports.createConnection = function createConnection(port, host, opts, onconnect
 
   if (typeof port === 'object' && port !== null) {
     opts = port
-    port = opts.port || 0
+    port = defaultTo(opts.port, 0)
     host = opts.host || 'localhost'
   }
 
@@ -948,6 +983,20 @@ function validatePort(port) {
   }
 }
 
+function validateMaxConnections(value) {
+  if (typeof value !== 'number') {
+    throw errors.INVALID_ARGUMENT(`Max connections must be a number, got ${typeof value}`)
+  }
+
+  if (value === Infinity) return
+
+  if (!Number.isInteger(value) || value < 0 || value > 0x7fffffff) {
+    throw errors.INVALID_ARGUMENT(
+      `Max connections must be a non-negative integer or Infinity, got ${value}`
+    )
+  }
+}
+
 function validateFd(fd) {
   if (typeof fd !== 'number') {
     throw errors.INVALID_FD(`File descriptor must be a number, got ${typeof fd}`)
@@ -970,6 +1019,22 @@ function validateInteger(value, name, min, max) {
       `${name} must be an integer between ${min} and ${max}, got ${value}`
     )
   }
+}
+
+function coerceBatch(batch) {
+  for (let i = 0; i < batch.length; i++) {
+    const chunk = batch[i].chunk
+
+    if (ArrayBuffer.isView(chunk) === false) {
+      throw errors.INVALID_ARGUMENT(`Chunk must be a string or a view, got ${typeof chunk}`)
+    }
+
+    batch[i].chunk = Buffer.coerce(chunk)
+  }
+}
+
+function defaultTo(value, fallback) {
+  return value === undefined || value === null ? fallback : value
 }
 
 function noop() {}

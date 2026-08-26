@@ -53,7 +53,7 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly connecting: boolean
   readonly pending: boolean
   readonly timeout?: number
-  readonly readyState: 'open' | 'opening'
+  readonly readyState: 'open' | 'opening' | 'readOnly' | 'writeOnly' | 'closed'
   readonly keepAlive: boolean
   readonly keepAliveInitialDelay: number
   readonly noDelay: boolean
@@ -63,6 +63,8 @@ interface TCPSocket<M extends TCPSocketEvents = TCPSocketEvents> extends Duplex<
   readonly remoteAddress?: string
   readonly remoteFamily?: string
   readonly remotePort?: number
+
+  address(): TCPSocketAddress | null
 
   connect(port: number, host?: string, opts?: TCPSocketConnectOptions, onconnect?: () => void): this
   connect(port: number, host: string, onconnect: () => void): this
@@ -151,8 +153,8 @@ interface TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEm
 }
 
 declare class TCPServer<M extends TCPServerEvents = TCPServerEvents> extends EventEmitter<M> {
-  constructor(opts?: TCPServerOptions, onconnection?: () => void)
-  constructor(onconnection: () => void)
+  constructor(opts?: TCPServerOptions, onconnection?: (socket: TCPSocket) => void)
+  constructor(onconnection: (socket: TCPSocket) => void)
 }
 
 declare function createConnection(
@@ -171,9 +173,12 @@ declare function createConnection(
   onconnect?: () => void
 ): TCPSocket
 
-declare function createServer(opts?: TCPServerOptions, onconnection?: () => void): TCPServer
+declare function createServer(
+  opts?: TCPServerOptions,
+  onconnection?: (socket: TCPSocket) => void
+): TCPServer
 
-declare function createServer(onconnection: () => void): TCPServer
+declare function createServer(onconnection: (socket: TCPSocket) => void): TCPServer
 
 declare function isIP(host: string): IPFamily | 0
 
