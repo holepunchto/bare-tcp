@@ -1,4 +1,5 @@
 const test = require('brittle')
+const os = require('bare-os')
 const tcp = require('.')
 const binding = require('./binding')
 
@@ -94,9 +95,9 @@ test('server + client, over IPv6', async (t) => {
 })
 
 test('socket, state getters', async (t) => {
-  t.plan(2)
+  t.plan(5)
 
-  const server = tcp.createServer().listen()
+  const server = tcp.createServer((socket) => socket.end()).listen()
   await waitForListening(server)
 
   const socket = new tcp.Socket()
@@ -105,7 +106,17 @@ test('socket, state getters', async (t) => {
   socket.connect(server.address().port)
   t.is(socket.connecting, true, 'connecting')
 
+  await waitFor(socket, 'connect')
+
+  t.is(socket.pending, false, 'not pending once connected')
+
   socket.destroy()
+
+  await waitFor(socket, 'close')
+
+  t.is(socket.pending, true, 'pending again once the handle is gone, as in Node')
+  t.is(socket.connecting, false, 'not connecting')
+
   server.close()
 })
 
@@ -208,6 +219,34 @@ test('socket, address', async (t) => {
     })
     .connect(server.address().port, '127.0.0.1')
     .end()
+})
+
+test('socket, link local addresses keep their zone', async (t) => {
+  const bound = await listenLinkLocal()
+
+  if (bound === null) {
+    t.comment('no bindable link local interface available')
+
+    return
+  }
+
+  const { server, host } = bound
+
+  // A link local address without its zone is ambiguous between interfaces, so
+  // it has to survive the round trip through the binding.
+  const { address, port } = server.address()
+
+  t.not(address.indexOf('%'), -1, 'the reported address carries a zone: ' + address)
+  t.is(address.split('%')[0], host.split('%')[0], 'and is otherwise unchanged')
+
+  const socket = tcp.createConnection(port, address)
+
+  await waitFor(socket, 'connect')
+
+  t.is(socket.remoteAddress, address, 'the peer address carries it too')
+
+  socket.destroy()
+  server.close()
 })
 
 test('socket, connecting is false after failed connect', async (t) => {
@@ -901,6 +940,43 @@ test('socket, open twice', (t) => {
   const socket = new tcp.Socket().open(a)
 
   t.exception(() => socket.open(b), /SOCKET_ALREADY_CONNECTED/)
+
+  socket.destroy()
+})
+
+test('socket, options recorded before an accept are applied', (t) => {
+  const keepalive = binding.keepalive
+  const nodelay = binding.nodelay
+
+  t.teardown(() => {
+    binding.keepalive = keepalive
+    binding.nodelay = nodelay
+  })
+
+  const applied = []
+
+  binding.keepalive = (handle, enable, delay) => applied.push(['keepalive', enable, delay])
+  binding.nodelay = (handle, enable) => applied.push(['nodelay', enable])
+
+  const socket = new tcp.Socket()
+
+  socket.setKeepAlive(true, 5000)
+  socket.setNoDelay(true)
+
+  t.alike(applied, [], 'nothing is applied while the socket has no peer')
+
+  // An IPC accept hands over an already connected handle, the way bare-pipe's
+  // `accept()` does.
+  socket[Symbol.for('bare.ipc.accept')]()
+
+  t.alike(
+    applied,
+    [
+      ['keepalive', true, 5],
+      ['nodelay', true]
+    ],
+    'the recorded options are applied once accepted'
+  )
 
   socket.destroy()
 })
@@ -1765,6 +1841,44 @@ test('server, connection that cannot be accepted', async (t) => {
   server.close()
 })
 
+test('server, connection listener that throws', async (t) => {
+  t.plan(3)
+
+  const server = tcp.createServer()
+
+  server.on('error', () => t.fail('a listener bug must not become a server error'))
+
+  // Capture the connection before the listener that throws runs, as listeners
+  // are called in the order they were added.
+  const accepted = new Promise((resolve) => server.on('connection', resolve))
+
+  server.on('connection', () => {
+    throw new Error('listener bug')
+  })
+
+  // The exception propagates out of the accept, as in Node, so it has to be
+  // caught here to keep it from taking the test process down with it.
+  const onuncaught = (err) => t.is(err.message, 'listener bug', 'the exception propagates')
+
+  Bare.on('uncaughtException', onuncaught)
+
+  t.teardown(() => Bare.off('uncaughtException', onuncaught))
+
+  server.listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const client = tcp.createConnection(server.address().port, '127.0.0.1').on('error', noop)
+
+  const socket = await accepted
+
+  t.absent(socket.destroying, 'the connection handed to the listener survives')
+  t.ok(server.connections.has(socket), 'and is still tracked by the server')
+
+  client.destroy()
+  server.close()
+})
+
 test('server, maxConnections drops excess connections', async (t) => {
   t.plan(4)
 
@@ -2172,6 +2286,99 @@ test('isIP', (t) => {
 
   t.ok(tcp.isIPv6('1:2:3:4:5:6:7:8'), 'IPv6')
   t.absent(tcp.isIPv6('127.0.0.1'), 'IPv4 is not IPv6')
+})
+
+async function listenLinkLocal() {
+  for (const host of linkLocalHosts()) {
+    const server = tcp.createServer((socket) => socket.resume())
+
+    try {
+      server.listen(0, host)
+
+      await waitForListening(server)
+    } catch {
+      server.close()
+
+      continue
+    }
+
+    return { server, host }
+  }
+
+  return null
+}
+
+function linkLocalHosts() {
+  const hosts = []
+
+  for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
+    for (const address of addresses) {
+      if (address.family !== 'IPv6') continue
+      if (address.address.startsWith('fe80:') === false) continue
+      if (address.scopeid === 0) continue
+
+      // Windows scopes an address by interface index, everything else by
+      // interface name, which is also how each platform reports the zone back.
+      const zone = Bare.platform === 'win32' ? address.scopeid : name
+
+      hosts.push(`${address.address}%${zone}`)
+    }
+  }
+
+  return hosts
+}
+
+test('socket, coerces a view that is not a buffer', async (t) => {
+  t.plan(1)
+
+  const chunks = []
+
+  const server = tcp.createServer((socket) => {
+    socket.on('data', (chunk) => chunks.push(chunk)).on('end', () => socket.end())
+  })
+
+  server.listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const socket = tcp.createConnection(server.address().port, '127.0.0.1')
+
+  const buffer = new ArrayBuffer(4)
+  new Uint8Array(buffer).set([1, 2, 3, 4])
+
+  // A view that is not a buffer shares its memory with the buffer it is coerced
+  // to, so the bytes have to arrive unchanged, offset and length included.
+  socket.end(new DataView(buffer, 1, 2))
+
+  await waitFor(socket, 'close')
+
+  t.alike(Buffer.concat(chunks), Buffer.from([2, 3]))
+
+  server.close()
+})
+
+test('socket, rejects a chunk that is not a view', async (t) => {
+  t.plan(1)
+
+  const server = tcp.createServer((socket) => socket.resume())
+
+  server.listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const socket = tcp.createConnection(server.address().port, '127.0.0.1')
+
+  await waitFor(socket, 'connect')
+
+  // An array buffer is not a view, so there is nothing for the write request to
+  // point at. It has to fail the write rather than reach the binding.
+  socket.write(new ArrayBuffer(4))
+
+  const err = await new Promise((resolve) => socket.on('error', resolve))
+
+  t.is(err.code, 'INVALID_ARGUMENT')
+
+  server.close()
 })
 
 function waitForListening(server) {

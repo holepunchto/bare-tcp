@@ -63,6 +63,8 @@ exports.Socket = class TCPSocket extends Duplex {
   }
 
   get pending() {
+    if (this._state & (constants.state.CLOSING | constants.state.CLOSED)) return true
+
     return (this._state & constants.state.CONNECTED) === 0
   }
 
@@ -262,20 +264,22 @@ exports.Socket = class TCPSocket extends Duplex {
       if (this._noDelay) this.setNoDelay(this._noDelay)
 
       if (onconnect) this.once('connect', onconnect)
-
-      this._continueOpen()
-
-      queueMicrotask(() => {
-        if (this._state & constants.state.CLOSING) return
-
-        this.emit('connect')
-      })
     } catch (err) {
       queueMicrotask(() => {
         if (this._pendingOpen) this._continueOpen(err)
         else this.destroy(err)
       })
+
+      return this
     }
+
+    this._continueOpen()
+
+    queueMicrotask(() => {
+      if (this._state & constants.state.CLOSING) return
+
+      this.emit('connect')
+    })
 
     return this
   }
@@ -376,6 +380,8 @@ exports.Socket = class TCPSocket extends Duplex {
     this._pendingWriteBatch = batch
 
     try {
+      coerceBatch(batch)
+
       binding.writev(
         this._handle,
         batch.map(({ chunk }) => chunk)
@@ -507,6 +513,9 @@ exports.Socket = class TCPSocket extends Duplex {
     this._updateAddresses()
 
     this._state |= constants.state.CONNECTED
+
+    if (this._keepAlive) this.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+    if (this._noDelay) this.setNoDelay(this._noDelay)
 
     this._continueOpen()
   }
@@ -810,13 +819,14 @@ exports.Server = class TCPServer extends EventEmitter {
       eagerOpen: !this._pauseOnConnect
     })
 
+    let info = null
     try {
       binding.accept(this._handle, socket._handle)
 
       socket._onaccept()
 
       if (overLimit) {
-        const info = {
+        info = {
           localAddress: socket.localAddress,
           localPort: socket.localPort,
           localFamily: socket.localFamily,
@@ -826,27 +836,26 @@ exports.Server = class TCPServer extends EventEmitter {
         }
 
         socket.destroy()
+      } else {
+        this._connections.add(socket)
 
-        this.emit('drop', info)
-        return
+        if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
+        if (this._noDelay) socket.setNoDelay(this._noDelay)
+
+        socket.on('close', () => {
+          this._connections.delete(socket)
+          this._closeMaybe()
+        })
       }
-
-      this._connections.add(socket)
-
-      if (this._keepAlive) socket.setKeepAlive(this._keepAlive, this._keepAliveInitialDelay)
-      if (this._noDelay) socket.setNoDelay(this._noDelay)
-
-      socket.on('close', () => {
-        this._connections.delete(socket)
-        this._closeMaybe()
-      })
-
-      this.emit('connection', socket)
     } catch (err) {
       socket.destroy()
 
       this.emit('error', err)
+      return
     }
+
+    if (info !== null) this.emit('drop', info)
+    else this.emit('connection', socket)
   }
 
   _onclose() {
@@ -1009,6 +1018,18 @@ function validateInteger(value, name, min, max) {
     throw errors.INVALID_ARGUMENT(
       `${name} must be an integer between ${min} and ${max}, got ${value}`
     )
+  }
+}
+
+function coerceBatch(batch) {
+  for (let i = 0; i < batch.length; i++) {
+    const chunk = batch[i].chunk
+
+    if (ArrayBuffer.isView(chunk) === false) {
+      throw errors.INVALID_ARGUMENT(`Chunk must be a string or a view, got ${typeof chunk}`)
+    }
+
+    batch[i].chunk = Buffer.coerce(chunk)
   }
 }
 

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <utf.h>
 #include <uv.h>
 
@@ -87,6 +88,21 @@ bare_tcp__from_sockaddr(const struct sockaddr *addr, bare_tcp_address_t ip, uint
 
     err = uv_inet_ntop(AF_INET6, &in6->sin6_addr, (char *) ip, INET6_ADDRSTRLEN);
     assert(err == 0);
+
+    // A link local address is only meaningful together with the interface it
+    // is scoped to, so append the zone identifier as `<address>%<zone>`. The
+    // address buffer is sized to hold it, and `uv_ip6_addr()` accepts it back.
+    if (IN6_IS_ADDR_LINKLOCAL(&in6->sin6_addr) && in6->sin6_scope_id != 0) {
+      size_t len = strlen((char *) ip);
+
+      size_t zone_len = sizeof(bare_tcp_address_t) - len - 1 /* '%' */;
+
+      ip[len] = '%';
+
+      if (uv_if_indextoiid(in6->sin6_scope_id, (char *) ip + len + 1, &zone_len) < 0) {
+        ip[len] = '\0';
+      }
+    }
 
     *port = ntohs(in6->sin6_port);
     *family = 6;
