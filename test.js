@@ -2381,6 +2381,80 @@ test('socket, rejects a chunk that is not a view', async (t) => {
   server.close()
 })
 
+test('socket, keep alive is coerced to a boolean', async (t) => {
+  t.plan(2)
+
+  const server = tcp.createServer((socket) => socket.resume()).listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  // A truthy value enables keep alive without standing in for the delay, which
+  // the number overload of setKeepAlive() would otherwise take it for.
+  const socket = tcp.createConnection({
+    port: server.address().port,
+    host: '127.0.0.1',
+    keepAlive: 1,
+    keepAliveInitialDelay: 5000
+  })
+
+  t.is(socket.keepAlive, true, 'keep alive enabled')
+  t.is(socket.keepAliveInitialDelay, 5000, 'delay kept')
+
+  socket.destroy()
+  server.close()
+
+  await waitFor(server, 'close')
+})
+
+test('server, keep alive is coerced to a boolean', async (t) => {
+  t.plan(2)
+
+  const server = tcp
+    .createServer({ keepAlive: 1, keepAliveInitialDelay: 5000 }, (socket) => {
+      t.is(socket.keepAlive, true, 'keep alive enabled')
+      t.is(socket.keepAliveInitialDelay, 5000, 'delay kept')
+
+      socket.destroy()
+    })
+    .listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  const socket = tcp.createConnection(server.address().port, '127.0.0.1')
+
+  await waitFor(socket, 'connect')
+
+  socket.destroy()
+
+  server.close()
+
+  await waitFor(server, 'close')
+})
+
+test('socket, allow half open is coerced to a boolean', async (t) => {
+  t.plan(1)
+
+  const server = tcp.createServer((socket) => socket.end('hello client')).listen(0, '127.0.0.1')
+
+  await waitForListening(server)
+
+  // A falsy value disables half open, as in Node, so the peer ending also ends
+  // the writable half.
+  const socket = tcp.createConnection({
+    port: server.address().port,
+    host: '127.0.0.1',
+    allowHalfOpen: 0
+  })
+
+  socket.on('finish', () => t.pass('socket finished without being ended')).resume()
+
+  await waitFor(socket, 'close')
+
+  server.close()
+
+  await waitFor(server, 'close')
+})
+
 function waitForListening(server) {
   if (server.listening) return Promise.resolve()
 

@@ -18,11 +18,11 @@ exports.Socket = class TCPSocket extends Duplex {
 
     validateInteger(readBufferSize, 'Read buffer size', 1, 0x7fffffff)
 
-    super({ eagerOpen })
+    super({ eagerOpen: !!eagerOpen })
 
     this._state = 0
 
-    this._allowHalfOpen = allowHalfOpen
+    this._allowHalfOpen = !!allowHalfOpen
 
     this._keepAlive = false
     this._keepAliveInitialDelay = 0
@@ -173,8 +173,8 @@ exports.Socket = class TCPSocket extends Duplex {
       timeout
     } = opts
 
-    if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-    if (noDelay) this.setNoDelay(noDelay)
+    if (keepAlive) this.setKeepAlive(true, keepAliveInitialDelay)
+    if (noDelay) this.setNoDelay(true)
     if (timeout) this.setTimeout(timeout)
 
     this._state |= constants.state.CONNECTING
@@ -249,8 +249,8 @@ exports.Socket = class TCPSocket extends Duplex {
 
     const { keepAlive = false, keepAliveInitialDelay = 0, noDelay = false, timeout } = opts
 
-    if (keepAlive) this.setKeepAlive(keepAlive, keepAliveInitialDelay)
-    if (noDelay) this.setNoDelay(noDelay)
+    if (keepAlive) this.setKeepAlive(true, keepAliveInitialDelay)
+    if (noDelay) this.setNoDelay(true)
     if (timeout) this.setTimeout(timeout)
 
     try {
@@ -601,11 +601,11 @@ exports.Server = class TCPServer extends EventEmitter {
     this._state = 0
 
     this._readBufferSize = readBufferSize
-    this._allowHalfOpen = allowHalfOpen
-    this._keepAlive = keepAlive
+    this._allowHalfOpen = !!allowHalfOpen
+    this._keepAlive = !!keepAlive
     this._keepAliveInitialDelay = keepAliveInitialDelay
-    this._noDelay = noDelay
-    this._pauseOnConnect = pauseOnConnect
+    this._noDelay = !!noDelay
+    this._pauseOnConnect = !!pauseOnConnect
     this._maxConnections = maxConnections
 
     this._address = null
