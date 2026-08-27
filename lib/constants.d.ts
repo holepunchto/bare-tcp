@@ -1,3 +1,4 @@
+/** Object containing internal state constants. */
 declare const constants: {
   state: {
     CONNECTING: number
