@@ -1126,6 +1126,35 @@ test('socket, setTimeout of zero disables the timeout', async (t) => {
   server.close()
 })
 
+test('socket, connect options do not outlive a lookup', async (t) => {
+  const sub = t.test()
+  sub.plan(2)
+
+  const server = tcp.createServer((socket) => socket.on('error', () => {})).listen()
+  await waitForListening(server)
+
+  // A host that has to be looked up, so that connecting takes a turn of the
+  // loop and the socket is there to be changed while it does.
+  const socket = tcp.createConnection({
+    port: server.address().port,
+    host: 'localhost',
+    timeout: 60000,
+    noDelay: false
+  })
+
+  socket.on('error', () => {})
+
+  socket.setTimeout(100, () => sub.pass('the timeout the caller set is the one that ran'))
+  socket.setNoDelay(true)
+
+  sub.is(socket.timeout, 100, 'and it is the one the socket reports')
+
+  await sub
+
+  socket.destroy()
+  server.close()
+})
+
 test('socket, setTimeout validation', (t) => {
   const socket = new tcp.Socket()
 

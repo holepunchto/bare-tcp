@@ -179,17 +179,15 @@ exports.Socket = class TCPSocket extends Duplex {
 
     this._state |= constants.state.CONNECTING
 
-    const type = ip.isIP(host)
-
-    if (type === 0) {
+    if (ip.isIP(host) === 0) {
       lookup(host, { all: true, family, hints }, (err, addresses) => {
         if (this._state & constants.state.CLOSING) return
-
-        this._state &= ~constants.state.CONNECTING
 
         if (!err) err = lookupError(addresses, host)
 
         if (err) {
+          this._state &= ~constants.state.CONNECTING
+
           this.emit('lookup', err, null, 0, host)
 
           if (this._pendingOpen) this._continueOpen(err)
@@ -201,29 +199,35 @@ exports.Socket = class TCPSocket extends Duplex {
           this.emit('lookup', null, address, family, host)
         }
 
-        const [{ address, family }, ...rest] = addresses
+        const [{ address }, ...rest] = addresses
 
         if (rest.length > 0) {
-          this._addresses = rest.map(({ address, family }) => [port, address, { ...opts, family }])
+          this._addresses = rest.map(({ address }) => [port, address])
 
           this._errors = []
         }
 
-        this.connect(port, address, { ...opts, family }, onconnect)
+        this._connect(port, address, onconnect)
       })
 
       return this
     }
 
+    this._connect(port, host, onconnect)
+
+    return this
+  }
+
+  _connect(port, host, onconnect) {
+    this._state |= constants.state.CONNECTING
+
     try {
-      binding.connect(this._handle, port, host, type)
+      binding.connect(this._handle, port, host, ip.isIP(host))
 
       if (onconnect) this.once('connect', onconnect)
     } catch (err) {
       queueMicrotask(() => this._failConnect(err))
     }
-
-    return this
   }
 
   open(fd, opts = {}, onconnect) {
@@ -529,7 +533,7 @@ exports.Socket = class TCPSocket extends Duplex {
 
     if (this._state & constants.state.UNREFED) binding.unref(this._handle)
 
-    this.connect(...this._addresses.shift())
+    this._connect(...this._addresses.shift())
   }
 
   _onread(err, read) {
